@@ -1,0 +1,95 @@
+name: Build APKs
+
+on:
+  push:
+    branches: [ master ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to create a Release and upload assets on tag push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Prepare release signing (only if secrets are configured)
+        env:
+          KS: ${{ secrets.BT_KEYSTORE_BASE64 }}
+          SP: ${{ secrets.BT_STORE_PASSWORD }}
+          KA: ${{ secrets.BT_KEY_ALIAS }}
+          KP: ${{ secrets.BT_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > "$RUNNER_TEMP/release.jks"
+            {
+              echo "BT_KEYSTORE_PATH=$RUNNER_TEMP/release.jks"
+              echo "BT_STORE_PASSWORD=$SP"
+              echo "BT_KEY_ALIAS=$KA"
+              echo "BT_KEY_PASSWORD=$KP"
+            } >> "$GITHUB_ENV"
+            echo "Release signing configured from secrets."
+          else
+            echo "No signing secrets found; release APKs will be debug-signed."
+          fi
+
+      - name: Resolve version label
+        id: ver
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "label=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "label=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build modern + legacy APKs
+        run: ./gradlew assembleModernRelease assembleLegacyRelease --console=plain --stacktrace
+
+      - name: Collect APKs (name carries the tag / commit)
+        run: |
+          VERSION="${{ steps.ver.outputs.label }}"
+          mkdir -p dist
+          cp app/build/outputs/apk/modern/release/*.apk "dist/bluetooth-modern-${VERSION}.apk"
+          cp app/build/outputs/apk/legacy/release/*.apk "dist/bluetooth-legacy-${VERSION}.apk"
+
+      - name: Upload workflow artifacts (every build)
+        uses: actions/upload-artifact@v4
+        with:
+          name: apks
+          path: dist/*.apk
+          if-no-files-found: error
+
+      - name: Publish to GitHub Release (on tag only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.apk
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          body: |
+            ## 下载哪个包？ / Which APK?
+
+            | 包 | 适用框架 |
+            |---|---|
+            | **bluetooth-modern-${{ github.ref_name }}.apk** | 现代 LibXposed，LSPosed **API ≥ 102**（较新 LSPosed / 新系统）。推荐优先尝试。 |
+            | **bluetooth-legacy-${{ github.ref_name }}.apk** | 经典 Xposed / 旧版 LSPosed / EdXposed（含 **API < 102**）。 |
+
+            - 两个包**功能完全相同**，按你的框架版本**二选一**安装，不要同时装（同一包名会互相覆盖）。
+            - 若安装现代包后 LSPosed 提示「**该模块需要更新的 Xposed 版本 102**」，改用 **legacy** 包。
+            - 启用后在 LSPosed 里勾选作用域：**com.android.bluetooth** 与 **本应用自身**。
