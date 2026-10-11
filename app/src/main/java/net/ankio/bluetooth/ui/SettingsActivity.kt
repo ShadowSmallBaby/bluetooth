@@ -24,6 +24,7 @@ import net.ankio.bluetooth.hook.HookBootstrap
 import net.ankio.bluetooth.rules.RuleRepository
 import net.ankio.bluetooth.rules.RuleUpdater
 import net.ankio.bluetooth.rules.SharedPreferencesRuleStore
+import net.ankio.bluetooth.update.UpdateChecker
 import net.ankio.bluetooth.utils.CustomTabsHelper
 import net.ankio.bluetooth.utils.LocaleDelegate
 import net.ankio.bluetooth.utils.SpUtils
@@ -218,6 +219,7 @@ class SettingsActivity : BaseActivity() {
         }
 
         setupRuleUpdate()
+        setupUpdateCheck()
      }
 
     private fun setupRuleUpdate() {
@@ -278,6 +280,59 @@ class SettingsActivity : BaseActivity() {
             is RuleUpdater.Result.Failed ->
                 Toast.makeText(this, getString(R.string.hook_rules_failed, result.reason), Toast.LENGTH_LONG).show()
         }
+    }
+
+    private fun setupUpdateCheck() {
+        binding.checkUpdate.setOnClickListener { performUpdateCheck() }
+    }
+
+    private fun performUpdateCheck() {
+        binding.checkUpdateStatus.text = getString(R.string.update_checking)
+        Thread {
+            val revision = runCatching { ruleRepository.current().rules.revision }.getOrDefault(0)
+            val result = UpdateChecker.check(revision)
+            runOnUiThread { showUpdateResult(result) }
+        }.start()
+    }
+
+    private fun showUpdateResult(result: UpdateChecker.Result) {
+        when (result) {
+            is UpdateChecker.Result.Failed -> {
+                binding.checkUpdateStatus.text = getString(R.string.check_update_desc)
+                Toast.makeText(this, getString(R.string.update_failed, result.reason), Toast.LENGTH_LONG).show()
+            }
+            is UpdateChecker.Result.Ok -> {
+                if (!result.appUpdate && !result.rulesUpdate) {
+                    binding.checkUpdateStatus.text = getString(R.string.update_none)
+                    Toast.makeText(this, R.string.update_none, Toast.LENGTH_SHORT).show()
+                    return
+                }
+                binding.checkUpdateStatus.text = getString(R.string.update_found)
+                val lines = buildList {
+                    if (result.appUpdate) add(getString(R.string.update_app_available, result.latestVersionName))
+                    if (result.rulesUpdate) add(getString(R.string.update_rules_available, result.latestRevision))
+                }
+                val dialog = MaterialAlertDialogBuilder(this)
+                    .setTitle(R.string.update_found)
+                    .setMessage(lines.joinToString("\n"))
+                    .setNegativeButton(R.string.close, null)
+                if (result.appUpdate) dialog.setPositiveButton(R.string.update_download_apk) { _, _ ->
+                    CustomTabsHelper.launchUrlOrCopy(this, UpdateChecker.apkUrl)
+                }
+                if (result.rulesUpdate) dialog.setNeutralButton(R.string.update_rules_now) { _, _ ->
+                    performRulesUpdateFromManifest()
+                }
+                dialog.show()
+            }
+        }
+    }
+
+    private fun performRulesUpdateFromManifest() {
+        Toast.makeText(this, R.string.hook_rules_updating, Toast.LENGTH_SHORT).show()
+        Thread {
+            val result = ruleUpdater.updateFrom(UpdateChecker.RULES_URL)
+            runOnUiThread { handleRuleResult(result) }
+        }.start()
     }
 
 

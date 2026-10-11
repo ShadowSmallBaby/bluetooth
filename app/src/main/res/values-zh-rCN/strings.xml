@@ -84,4 +84,14 @@
     <string name="hook_rules_updated">规则已更新到版本 %1$d</string>
     <string name="hook_rules_unchanged">规则已是最新</string>
     <string name="hook_rules_failed">规则更新失败：%1$s</string>
+    <string name="check_update_title">检查更新</string>
+    <string name="check_update_desc">检查应用与 Hook 规则更新</string>
+    <string name="update_checking">检查中…</string>
+    <string name="update_none">已是最新</string>
+    <string name="update_failed">检查更新失败：%1$s</string>
+    <string name="update_found">发现更新</string>
+    <string name="update_app_available">应用新版本 %1$s</string>
+    <string name="update_rules_available">新 Hook 规则（版本 %1$d）</string>
+    <string name="update_download_apk">下载新版本</string>
+    <string name="update_rules_now">更新规则</string>
 </resources>

@@ -87,4 +87,14 @@
     <string name="hook_rules_updated">Rules updated to revision %1$d</string>
     <string name="hook_rules_unchanged">Rules are already up to date</string>
     <string name="hook_rules_failed">Rule update failed: %1$s</string>
+    <string name="check_update_title">Check for updates</string>
+    <string name="check_update_desc">Check for app and hook-rule updates</string>
+    <string name="update_checking">Checking…</string>
+    <string name="update_none">Already up to date</string>
+    <string name="update_failed">Update check failed: %1$s</string>
+    <string name="update_found">Updates available</string>
+    <string name="update_app_available">New app version %1$s</string>
+    <string name="update_rules_available">New hook rules (revision %1$d)</string>
+    <string name="update_download_apk">Download APK</string>
+    <string name="update_rules_now">Update rules</string>
 </resources>

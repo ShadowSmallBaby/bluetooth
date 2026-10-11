@@ -444,6 +444,42 @@
                             android:textColor="?attr/colorOutline"/>
                 </LinearLayout>
             </RelativeLayout>
+
+            <TextView
+                    style="@style/TextViewLineSetting"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/check_update_title"/>
+
+            <RelativeLayout
+                    android:id="@+id/check_update"
+                    style="@style/SettingLine"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_centerVertical="true"
+                        android:layout_marginTop="@dimen/one_padding"
+                        android:layout_marginBottom="@dimen/one_padding"
+                        android:orientation="vertical">
+
+                    <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/check_update_title"
+                            android:textAppearance="@style/TextAppearance.AppCompat.Medium"/>
+
+                    <TextView
+                            android:id="@+id/check_update_status"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/check_update_desc"
+                            android:textAppearance="@style/TextAppearance.AppCompat.Small"
+                            android:textColor="?attr/colorOutline"/>
+                </LinearLayout>
+            </RelativeLayout>
         </LinearLayout>
     </ScrollView>
 
