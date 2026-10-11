@@ -1,4 +1,5 @@
 package net.ankio.bluetooth.service
+import net.ankio.bluetooth.config.PreferenceKeys
 
 import android.Manifest
 import android.app.AlarmManager
@@ -39,8 +40,8 @@ class SendWebdavServer : Service() {
         private const val CHANNEL_ID = "ForegroundServiceChannel"
     }
     private val TAG = "BluetoothScanService"
-    private var deviceAddress = SpUtils.getString("pref_mac2", "") // 指定的蓝牙设备MAC地址
-    private var deviceCompany = SpUtils.getString("pref_company", "") // 指定的蓝牙设备公司
+    private var deviceAddress = SpUtils.getString(PreferenceKeys.WEBDAV_MAC, "") // 指定的蓝牙设备MAC地址
+    private var deviceCompany = SpUtils.getString(PreferenceKeys.WEBDAV_COMPANY, "") // 指定的蓝牙设备公司
     private val scanInterval: Long = 10 * 60 * 1000 // 10 minutes
 
     private lateinit var bluetoothAdapter: BluetoothAdapter
@@ -61,7 +62,7 @@ class SendWebdavServer : Service() {
             .build()
 
         startForeground(1, notification)
-        if(deviceAddress==="" && deviceCompany===""){
+        if(deviceAddress == "" && deviceCompany == ""){
             stopSelf()
         }
         bluetoothAdapter = (getSystemService(BLUETOOTH_SERVICE) as BluetoothManager).adapter
@@ -78,8 +79,8 @@ class SendWebdavServer : Service() {
                     coroutineScope .launch(Dispatchers.IO) {
                         try {
                             WebdavUtils(
-                                SpUtils.getString("webdav_username", ""),
-                                SpUtils.getString("webdav_password", "")
+                                SpUtils.getString(PreferenceKeys.WEBDAV_USERNAME, ""),
+                                SpUtils.getString(PreferenceKeys.WEBDAV_PASSWORD, "")
                             ).sendToServer(
                                 net.ankio.bluetooth.bluetooth.BluetoothData(
                                     ByteUtils.bytesToHexString(scanRecord)?:"",
@@ -121,7 +122,13 @@ class SendWebdavServer : Service() {
             ) {
                          return
             }
-            bluetoothAdapter.bluetoothLeScanner.startScan(scanCallback)
+            val scanner = bluetoothAdapter.bluetoothLeScanner
+            if (scanner == null) {
+                Log.e(TAG, getString(R.string.unsupported_bluetooth))
+                stopSelf()
+                return
+            }
+            scanner.startScan(scanCallback)
             Handler(Looper.getMainLooper()).postDelayed({
                 startScan()
             },scanInterval )
@@ -144,7 +151,7 @@ class SendWebdavServer : Service() {
             return
         }
         try{
-            bluetoothAdapter.bluetoothLeScanner.stopScan(scanCallback)
+            bluetoothAdapter.bluetoothLeScanner?.stopScan(scanCallback)
         }catch (_:Exception){
 
         }

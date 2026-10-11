@@ -1,4 +1,5 @@
 package net.ankio.bluetooth.ui
+import net.ankio.bluetooth.config.PreferenceKeys
 
 
 import android.content.Intent
@@ -26,6 +27,7 @@ import com.thegrizzlylabs.sardineandroid.impl.SardineException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -37,12 +39,13 @@ import net.ankio.bluetooth.databinding.ActivityMainBinding
 import net.ankio.bluetooth.service.SendWebdavServer
 import net.ankio.bluetooth.utils.BleAdvertiserManager
 import net.ankio.bluetooth.utils.ClipboardUtils
-import net.ankio.bluetooth.utils.HookUtils
+import net.ankio.bluetooth.utils.ModuleStatus
 import net.ankio.bluetooth.utils.SpUtils
 import net.ankio.bluetooth.utils.WebdavUtils
 import rikka.html.text.toHtml
 import java.lang.Exception
 import java.util.ArrayList
+import kotlin.time.Duration.Companion.milliseconds
 
 
 class MainActivity : BaseActivity() {
@@ -101,7 +104,7 @@ class MainActivity : BaseActivity() {
      * 判断是否为发送端
      */
     private fun isSender(): Boolean {
-        return SpUtils.getBoolean("pref_enable_webdav", false) && SpUtils.getBoolean("pref_as_sender", false)
+        return SpUtils.getBoolean(PreferenceKeys.WEBDAV_ENABLED, false) && SpUtils.getBoolean(PreferenceKeys.WEBDAV_SENDER, false)
     }
 
     /**
@@ -112,7 +115,7 @@ class MainActivity : BaseActivity() {
             startServer()
         }else{
             stopServer()
-            if(SpUtils.getBoolean("pref_enable_webdav", false)){
+            if(SpUtils.getBoolean(PreferenceKeys.WEBDAV_ENABLED, false)){
                try {
                    syncFromServer()
                }catch (e:Exception){
@@ -151,13 +154,13 @@ class MainActivity : BaseActivity() {
                 setActive(R.string.server_working,com.google.android.material.R.attr.colorPrimary,com.google.android.material.R.attr.colorOnPrimary,R.drawable.ic_success)
             }
         //其他情况就判断插件是否运行
-        }else if (HookUtils.getActiveAndSupportFramework()) {
-            if(HookUtils.getXposedVersion() < 93){
+        }else if (ModuleStatus.isActive) {
+            if(!ModuleStatus.isSupported){
                 setActive(R.string.active_version,com.google.android.material.R.attr.colorSecondary,com.google.android.material.R.attr.colorOnSecondary,R.drawable.ic_error)
                 return
             }
 
-            SpUtils.putInt("app_version",BuildConfig.VERSION_CODE)
+            SpUtils.putInt(PreferenceKeys.APP_VERSION,BuildConfig.VERSION_CODE)
             //其他情况就是激活
             setActive(R.string.active_success,com.google.android.material.R.attr.colorPrimary,com.google.android.material.R.attr.colorOnPrimary,R.drawable.ic_success)
 
@@ -171,13 +174,13 @@ class MainActivity : BaseActivity() {
 
         // 延迟状态刷新，减少频率
         coroutineScope.launch {
-            delay(500) // 延迟500ms再刷新状态
+            delay(500.milliseconds) // 延迟500ms再刷新状态
             setMacBluetoothData()
             serverConnect()
             refreshStatus()
 
             // 延迟刷新BLE状态，避免过频繁更新
-            delay(200)
+            delay(200.milliseconds)
             runOnUiThread {
                 updateBleAdvertiserStatus(BleAdvertiserManager.ServiceState.isEnabled(this@MainActivity))
             }
@@ -192,9 +195,11 @@ class MainActivity : BaseActivity() {
         }
         bleEventReceiver = null
 
-        
+
         // 停止倒计时
         stopBleCountdown()
+        // 取消界面协程作用域，避免 onResume 中启动的任务在销毁后继续执行
+        coroutineScope.cancel()
     }
 
     /**
@@ -256,11 +261,11 @@ class MainActivity : BaseActivity() {
         coroutineScope .launch(Dispatchers.IO) {
             try {
                 // 在后台线程中执行网络操作
-                val bluetoothData  = WebdavUtils(SpUtils.getString("webdav_username", ""),SpUtils.getString("webdav_password", "")).getFromServer()
+                val bluetoothData  = WebdavUtils(SpUtils.getString(PreferenceKeys.WEBDAV_USERNAME, ""),SpUtils.getString(PreferenceKeys.WEBDAV_PASSWORD, "")).getFromServer()
                 if(bluetoothData!=null){
                     //只更新data，mac地址
-                    SpUtils.putString("pref_data",bluetoothData.data)
-                    SpUtils.putString("pref_mac",bluetoothData.mac)
+                    SpUtils.putString(PreferenceKeys.DATA,bluetoothData.data)
+                    SpUtils.putString(PreferenceKeys.MAC,bluetoothData.mac)
                 }
                 withContext(Dispatchers.Main) {
                     //同步完成数据后，重绘页面
@@ -276,19 +281,19 @@ class MainActivity : BaseActivity() {
     }
 
     fun saveToLocal(){
-        val historyJson = SpUtils.getString("history", "")
+        val historyJson = SpUtils.getString(PreferenceKeys.HISTORY, "")
         var localHistoryList = Gson().fromJson(historyJson, object : TypeToken<List<BleDevice>>() {}.type)
                 as? MutableList<BleDevice>
         if(localHistoryList==null){
             localHistoryList = ArrayList()
         }
-        val pref_data = SpUtils.getString("pref_data", "")
-        val pref_mac = SpUtils.getString("pref_mac", "")
-        val pref_rssi = SpUtils.getString("pref_rssi", "-50")
+        val pref_data = SpUtils.getString(PreferenceKeys.DATA, "")
+        val pref_mac = SpUtils.getString(PreferenceKeys.MAC, "")
+        val pref_rssi = SpUtils.getString(PreferenceKeys.RSSI, "-50")
         var value = pref_rssi
         if (value == "") value = "-50" // 默认值应该是-50，不是0
         var insert = false
-        var saveHistory = ArrayList<BleDevice>()
+        val saveHistory = ArrayList<BleDevice>()
         localHistoryList.forEach {
             if(it.address == pref_mac){
                 it.data = pref_data
@@ -302,7 +307,7 @@ class MainActivity : BaseActivity() {
         if(!insert){
             saveHistory.add(BleDevice(pref_data,getString(R.string.manual_increase),value.toInt(),pref_mac,""))
         }
-        SpUtils.putString("history",Gson().toJson(saveHistory))
+        SpUtils.putString(PreferenceKeys.HISTORY,Gson().toJson(saveHistory))
     }
 
     /**
@@ -310,7 +315,7 @@ class MainActivity : BaseActivity() {
      */
     private fun setMacBluetoothData() {
         //蓝牙数据设置
-        SpUtils.getString("pref_mac", "").apply {
+        SpUtils.getString(PreferenceKeys.MAC, "").apply {
             binding.macLabel.setText(this)
             binding.macLabel.addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(
@@ -326,13 +331,13 @@ class MainActivity : BaseActivity() {
                 }
 
                 override fun afterTextChanged(s: Editable) {
-                    SpUtils.putString("pref_mac", s.toString())
+                    SpUtils.putString(PreferenceKeys.MAC, s.toString())
                     saveToLocal()
                 }
             })
 
         }
-        SpUtils.getString("pref_data", "").apply {
+        SpUtils.getString(PreferenceKeys.DATA, "").apply {
             binding.broadcastLabel.setText(this)
             binding.broadcastLabel.addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(
@@ -348,13 +353,13 @@ class MainActivity : BaseActivity() {
                 }
 
                 override fun afterTextChanged(s: Editable) {
-                    SpUtils.putString("pref_data", s.toString())
+                    SpUtils.putString(PreferenceKeys.DATA, s.toString())
                     saveToLocal()
                 }
             })
 
         }
-        SpUtils.getString("pref_rssi", "-50").apply {
+        SpUtils.getString(PreferenceKeys.RSSI, "-50").apply {
             var value = this
             if (value == "") value = "-50"
 
@@ -375,29 +380,29 @@ class MainActivity : BaseActivity() {
                     else -> (sliderValue - 100).toInt()
                 }
                 binding.tvRssi.text = "$newRssi dBm"
-                SpUtils.putString("pref_rssi", newRssi.toString())
+                SpUtils.putString(PreferenceKeys.RSSI, newRssi.toString())
                 saveToLocal()
             }
 
         }
 
         //启用webdav
-        SpUtils.getBoolean("pref_enable_webdav", false).apply {
+        SpUtils.getBoolean(PreferenceKeys.WEBDAV_ENABLED, false).apply {
             binding.webdavEnable.isChecked = this
             binding.webdavEnable.setOnCheckedChangeListener { _, isChecked ->
-                SpUtils.putBoolean("pref_enable_webdav", isChecked)
+                SpUtils.putBoolean(PreferenceKeys.WEBDAV_ENABLED, isChecked)
                 //启用webdav重连服务
                 serverConnect()
             }
         }
         //是否作为发送端
-        SpUtils.getBoolean("pref_as_sender", false).apply {
+        SpUtils.getBoolean(PreferenceKeys.WEBDAV_SENDER, false).apply {
             binding.asSender.isChecked = this
             binding.asSender.setOnCheckedChangeListener { _, isChecked ->
-                SpUtils.putBoolean("pref_as_sender", isChecked)
+                SpUtils.putBoolean(PreferenceKeys.WEBDAV_SENDER, isChecked)
                 if (isChecked) {
                     binding.enable.visibility = View.GONE
-                    SpUtils.putBoolean("pref_enable", false)
+                    SpUtils.putBoolean(PreferenceKeys.ENABLED, false)
                 } else {
                     binding.enable.visibility = View.VISIBLE
                 }
@@ -406,14 +411,14 @@ class MainActivity : BaseActivity() {
 
         }
         //是否开启模拟
-        SpUtils.getBoolean("pref_enable", false).apply {
+        SpUtils.getBoolean(PreferenceKeys.ENABLED, false).apply {
             binding.switchButton.isChecked = this
             binding.switchButton.setOnCheckedChangeListener { _, isChecked ->
-                SpUtils.putBoolean("pref_enable", isChecked)
+                SpUtils.putBoolean(PreferenceKeys.ENABLED, isChecked)
             }
         }
         //配置信息
-        SpUtils.getString("webdav_server", "https://dav.jianguoyun.com/dav/").apply {
+        SpUtils.getString(PreferenceKeys.WEBDAV_SERVER, "https://dav.jianguoyun.com/dav/").apply {
             binding.webdavLabel.setText(this)
             binding.webdavLabel.addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(
@@ -429,12 +434,12 @@ class MainActivity : BaseActivity() {
                 }
 
                 override fun afterTextChanged(s: Editable) {
-                    SpUtils.putString("webdav_server", s.toString())
+                    SpUtils.putString(PreferenceKeys.WEBDAV_SERVER, s.toString())
                 }
             })
 
         }
-        SpUtils.getString("webdav_username", "").apply {
+        SpUtils.getString(PreferenceKeys.WEBDAV_USERNAME, "").apply {
             binding.usernameLabel.setText(this)
             binding.usernameLabel.addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(
@@ -450,12 +455,12 @@ class MainActivity : BaseActivity() {
                 }
 
                 override fun afterTextChanged(s: Editable) {
-                    SpUtils.putString("webdav_username", s.toString())
+                    SpUtils.putString(PreferenceKeys.WEBDAV_USERNAME, s.toString())
                 }
             })
 
         }
-        SpUtils.getString("webdav_password", "").apply {
+        SpUtils.getString(PreferenceKeys.WEBDAV_PASSWORD, "").apply {
             binding.passwordLabel.setText(this)
             binding.passwordLabel.addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(
@@ -471,12 +476,12 @@ class MainActivity : BaseActivity() {
                 }
 
                 override fun afterTextChanged(s: Editable) {
-                    SpUtils.putString("webdav_password", s.toString())
+                    SpUtils.putString(PreferenceKeys.WEBDAV_PASSWORD, s.toString())
                 }
             })
 
         }
-        SpUtils.getString("pref_company", "").apply {
+        SpUtils.getString(PreferenceKeys.WEBDAV_COMPANY, "").apply {
             binding.companyLabel.setText(this)
             binding.companyLabel.addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(
@@ -492,12 +497,12 @@ class MainActivity : BaseActivity() {
                 }
 
                 override fun afterTextChanged(s: Editable) {
-                    SpUtils.putString("pref_company", s.toString())
+                    SpUtils.putString(PreferenceKeys.WEBDAV_COMPANY, s.toString())
                 }
             })
 
         }
-        SpUtils.getString("pref_mac2", "").apply {
+        SpUtils.getString(PreferenceKeys.WEBDAV_MAC, "").apply {
             binding.mac2Label.setText(this)
             binding.mac2Label.addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(
@@ -513,13 +518,13 @@ class MainActivity : BaseActivity() {
                 }
 
                 override fun afterTextChanged(s: Editable) {
-                    SpUtils.putString("pref_mac2", s.toString())
+                    SpUtils.putString(PreferenceKeys.WEBDAV_MAC, s.toString())
                 }
             })
 
         }
 
-        SpUtils.getString("webdav_last", getString(R.string.webdav_no_sync)).apply {
+        SpUtils.getString(PreferenceKeys.WEBDAV_LAST, getString(R.string.webdav_no_sync)).apply {
             binding.lastDate.text = this
         }
 
@@ -553,10 +558,7 @@ class MainActivity : BaseActivity() {
     private fun setupBleAdvertiserUI() {
         val isEnabled = BleAdvertiserManager.ServiceState.isEnabled(this)
 
-        binding.bleAdvertiserSwitch.setOnCheckedChangeListener { _, isChecked ->
-            onBleSwitchChanged(isChecked)
-        }
-
+        // 先置空监听器再设置初始状态，避免初始化赋值触发回调（重复注册会导致误触发）
         binding.bleAdvertiserSwitch.setOnCheckedChangeListener(null)
         binding.bleAdvertiserSwitch.isChecked = isEnabled
         binding.bleAdvertiserSwitch.setOnCheckedChangeListener { _, isChecked ->
@@ -788,11 +790,11 @@ class MainActivity : BaseActivity() {
                 val bleSupported = BleAdvertiserManager.isBleAdvertisingSupported(this@MainActivity)
                 appendLine("BLE广播支持: ${if (bleSupported) "✅ 支持" else "❌ 不支持"}")
 
-                val isEnabled = SpUtils.getBoolean("pref_ble_advertiser_enabled", false)
+                val isEnabled = SpUtils.getBoolean(PreferenceKeys.BLE_ADVERTISER_ENABLED, false)
                 appendLine("广播开关: ${if (isEnabled) "✅ 已开启" else "❌ 已关闭"}")
 
-                val macAddress = SpUtils.getString("pref_mac", "未配置")
-                val broadcastData = SpUtils.getString("pref_data", "未配置")
+                val macAddress = SpUtils.getString(PreferenceKeys.MAC, "未配置")
+                val broadcastData = SpUtils.getString(PreferenceKeys.DATA, "未配置")
                 appendLine("配置MAC: $macAddress")
                 appendLine("广播数据长度: ${broadcastData.length/2} 字节")
 

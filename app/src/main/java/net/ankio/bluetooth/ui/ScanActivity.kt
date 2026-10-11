@@ -1,4 +1,5 @@
 package net.ankio.bluetooth.ui
+import net.ankio.bluetooth.config.PreferenceKeys
 
 import android.Manifest
 import android.app.Activity
@@ -141,7 +142,7 @@ class ScanActivity : BaseActivity() {
      * 初始化
      */
     private fun initView() {
-        val historyJson = SpUtils.getString("history", "")
+        val historyJson = SpUtils.getString(PreferenceKeys.HISTORY, "")
         val localHistoryList = Gson().fromJson(historyJson, object : TypeToken<List<BleDevice>>() {}.type)
                 as? MutableList<BleDevice> // 使用安全类型转换操作符as?
         historyList = localHistoryList?:mutableListOf()
@@ -150,12 +151,12 @@ class ScanActivity : BaseActivity() {
         bleAdapter = BleDeviceAdapter(mList).apply {
             setOnItemClickListener { _, _, position ->
                 val bleDevice = mList[position]
-                SpUtils.putString("pref_mac", bleDevice.address)
-                SpUtils.putString("pref_data", bleDevice.data)
-                SpUtils.putString("pref_rssi", bleDevice.rssi.toString())
+                SpUtils.putString(PreferenceKeys.MAC, bleDevice.address)
+                SpUtils.putString(PreferenceKeys.DATA, bleDevice.data)
+                SpUtils.putString(PreferenceKeys.RSSI, bleDevice.rssi.toString())
                 if(!historyList.contains(bleDevice)){
                     historyList.add(bleDevice)
-                    SpUtils.putString("history",Gson().toJson(historyList))
+                    SpUtils.putString(PreferenceKeys.HISTORY,Gson().toJson(historyList))
                 }
                 stopScan()
                 startActivity(Intent(this@ScanActivity, MainActivity::class.java))
@@ -167,7 +168,7 @@ class ScanActivity : BaseActivity() {
                 adapter.notifyItemRemoved(position)
                 mList.removeAt(position)
                 historyList.removeAt(position)
-                SpUtils.putString("history",Gson().toJson(historyList))
+                SpUtils.putString(PreferenceKeys.HISTORY,Gson().toJson(historyList))
                 true
             }
         }
@@ -284,18 +285,23 @@ class ScanActivity : BaseActivity() {
         if (isScanning) {
             return
         }
-        isScanning = true
         addressList.clear()
         mList.clear()
 
 
 
         try{
-            defaultAdapter.bluetoothLeScanner.startScan(scanCallback)
+            val scanner = defaultAdapter.bluetoothLeScanner
+            if (scanner == null) {
+                showMsg(R.string.unsupported_bluetooth)
+                return
+            }
+            scanner.startScan(scanCallback)
         }catch (_:SecurityException){
             showMsg(R.string.no_permission);return;
         }
 
+        isScanning = true
         binding.progressBar.visibility = View.VISIBLE
         binding.fabAdd.text = getString(R.string.stop_scan)
         binding.fabAdd.icon = AppCompatResources.getDrawable(this, R.drawable.ic_bluetooth_close)
@@ -316,7 +322,7 @@ class ScanActivity : BaseActivity() {
         if (isScanning) {
             isScanning = false
            try{
-               defaultAdapter.bluetoothLeScanner.stopScan(scanCallback)
+               defaultAdapter.bluetoothLeScanner?.stopScan(scanCallback)
            }catch (_:SecurityException){
                showMsg(R.string.no_permission);return;
            }

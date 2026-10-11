@@ -1,4 +1,5 @@
 package net.ankio.bluetooth.utils
+import net.ankio.bluetooth.config.PreferenceKeys
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -76,17 +77,17 @@ object BleAdvertiserManager {
 
         fun setEnabled(context: Context, enabled: Boolean) {
             Log.d(TAG, "设置服务状态: enabled=$enabled")
-            SpUtils.putBoolean("pref_ble_advertiser_enabled", enabled)
+            SpUtils.putBoolean(PreferenceKeys.BLE_ADVERTISER_ENABLED, enabled)
         }
 
         fun isEnabled(context: Context): Boolean {
-            return SpUtils.getBoolean("pref_ble_advertiser_enabled", false)
+            return SpUtils.getBoolean(PreferenceKeys.BLE_ADVERTISER_ENABLED, false)
         }
 
         fun validateConfiguration(context: Context): ConfigValidationResult {
-            val mac = SpUtils.getString("pref_mac", "").trim()
-            val data = SpUtils.getString("pref_data", "").trim()
-            val rssiStr = SpUtils.getString("pref_rssi", BroadcastConfig.DEFAULT_RSSI.toString()).trim()
+            val mac = SpUtils.getString(PreferenceKeys.MAC, "").trim()
+            val data = SpUtils.getString(PreferenceKeys.DATA, "").trim()
+            val rssiStr = SpUtils.getString(PreferenceKeys.RSSI, BroadcastConfig.DEFAULT_RSSI.toString()).trim()
 
             return when {
                 mac.isEmpty() -> ConfigValidationResult(false, "MAC地址不能为空")
@@ -340,7 +341,7 @@ object BleAdvertiserManager {
      */
     fun isServiceRunning(context: Context): Boolean {
         return try {
-            SpUtils.getBoolean("pref_ble_advertiser_enabled", false)
+            SpUtils.getBoolean(PreferenceKeys.BLE_ADVERTISER_ENABLED, false)
         } catch (e: Exception) {
             Log.e(TAG, "检查服务状态时发生错误", e)
             false

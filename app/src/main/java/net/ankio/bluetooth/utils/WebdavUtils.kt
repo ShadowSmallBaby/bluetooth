@@ -1,4 +1,5 @@
 package net.ankio.bluetooth.utils
+import net.ankio.bluetooth.config.PreferenceKeys
 
 
 import android.util.Log
@@ -20,7 +21,7 @@ class WebdavUtils(username:String,password:String) {
 
     private val sardine: Sardine = OkHttpSardine()
 
-    private val server = SpUtils.getString("webdav_server", "https://dav.jianguoyun.com/dav/").trimEnd('/')
+    private val server = SpUtils.getString(PreferenceKeys.WEBDAV_SERVER, "https://dav.jianguoyun.com/dav/").trimEnd('/')
     private var dir = server +   "/bluetooth".trimEnd('/')
     private var file = "$dir/bluetooth.json"
     init {
@@ -32,7 +33,7 @@ class WebdavUtils(username:String,password:String) {
 
     fun sendToServer(bluetoothData: BluetoothData) {
         Log.i("Webdav","Send Bluetooth to Webdav")
-        SpUtils.putString("webdav_last",getTime())
+        SpUtils.putString(PreferenceKeys.WEBDAV_LAST,getTime())
         val gson = Gson()
         // 将 User 对象转换为 JSON 数据
         val json = gson.toJson(bluetoothData)
@@ -52,7 +53,7 @@ class WebdavUtils(username:String,password:String) {
 
     fun getFromServer(): BluetoothData? {
         if (sardine.exists(file)) {
-            SpUtils.putString("webdav_last",getTime())
+            SpUtils.putString(PreferenceKeys.WEBDAV_LAST,getTime())
             return Gson().fromJson(
                 convertInputStreamToString(sardine.get(file)),
                 BluetoothData::class.java

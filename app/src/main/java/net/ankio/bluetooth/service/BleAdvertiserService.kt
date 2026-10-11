@@ -1,4 +1,5 @@
 package net.ankio.bluetooth.service
+import net.ankio.bluetooth.config.PreferenceKeys
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -21,10 +22,12 @@ import android.os.ParcelUuid
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -33,6 +36,7 @@ import net.ankio.bluetooth.ui.MainActivity
 import net.ankio.bluetooth.utils.BleAdvertiserManager
 import net.ankio.bluetooth.utils.ByteUtils
 import net.ankio.bluetooth.utils.SpUtils
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * BLE外围设备广播服务
@@ -182,7 +186,7 @@ class BleAdvertiserService : Service() {
             startForeground(NOTIFICATION_ID, createNotification())
 
             // 获取配置数据
-            val broadcastDataHex = SpUtils.getString("pref_data", BleAdvertiserManager.BroadcastConfig.DEFAULT_DATA)
+            val broadcastDataHex = SpUtils.getString(PreferenceKeys.DATA, BleAdvertiserManager.BroadcastConfig.DEFAULT_DATA)
             val dataBytes = ByteUtils.hexStringToBytes(broadcastDataHex)
 
             if (dataBytes.isEmpty()) {
@@ -283,6 +287,7 @@ class BleAdvertiserService : Service() {
     private fun notifyManager(event: AdvertisingEvent, message: String? = null) {
         // 发送广播通知Manager
         val intent = Intent("net.ankio.bluetooth.ADVERTISING_EVENT").apply {
+            setPackage(packageName)
             putExtra("event", event.name)
             message?.let { putExtra("message", it) }
         }
@@ -332,7 +337,7 @@ class BleAdvertiserService : Service() {
         if (isAdvertising) {
             stopAdvertising()
             advertisingJob = serviceScope.launch {
-                delay(1000)
+                delay(1000.milliseconds)
                 startAdvertising()
             }
         }
@@ -435,8 +440,11 @@ class BleAdvertiserService : Service() {
         advertisingJob = serviceScope.launch {
             while (isActive && isAdvertising) {
                 try {
-                    delay(1000)
+                    delay(1000.milliseconds)
                 } catch (e: Exception) {
+                    if (e is CancellationException) {
+                        ensureActive()
+                    }
                     Log.e(TAG, "周期性广播更新异常：${e.message}")
                 }
             }
