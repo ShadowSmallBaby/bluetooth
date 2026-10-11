@@ -1,4 +1,5 @@
 package net.ankio.bluetooth.utils
+import net.ankio.bluetooth.config.PreferenceKeys
 
 import de.robv.android.xposed.XSharedPreferences
 import de.robv.android.xposed.XposedBridge
@@ -14,7 +15,7 @@ object HookLogManager {
 
     private const val PREF_NAME = "net.ankio.bluetooth"
     private const val CONFIG_NAME = "config"
-    private const val LOG_ENABLED_KEY = "pref_hook_log_enabled"
+    private const val LOG_ENABLED_KEY = PreferenceKeys.HOOK_LOG
 
     private val preferences: XSharedPreferences by lazy {
         val prefs = XSharedPreferences(PREF_NAME, CONFIG_NAME)

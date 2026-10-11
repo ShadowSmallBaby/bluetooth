@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "revision": 1,
+  "profiles": [
+    {
+      "id": "aosp-gatt",
+      "packages": ["com.android.bluetooth"],
+      "minSdk": 24,
+      "maxSdk": 2147483647,
+      "classes": [
+        "com.android.bluetooth.gatt.GattService",
+        "com.android.bluetooth.le_scan.ScanController"
+      ],
+      "start": [
+        {"name": "start", "parameters": []},
+        {"name": "initialize", "parameters": []},
+        {"name": "onStart", "parameters": []},
+        {"name": "initMiFeature", "parameters": []}
+      ],
+      "stop": [
+        {"name": "stop", "parameters": []},
+        {"name": "cleanup", "parameters": []},
+        {"name": "onStop", "parameters": []},
+        {"name": "deinitialize", "parameters": []}
+      ],
+      "constructorFallback": true,
+      "targetPaths": [
+        [{"kind": "method", "name": "getScanController"}],
+        [{"kind": "method", "name": "getTransitionalScanHelper"}],
+        [{"kind": "method", "name": "getScanHelper"}],
+        []
+      ],
+      "handlerPaths": [
+        [{"kind": "field", "name": "mHandler"}]
+      ],
+      "allowMainThread": false,
+      "callbacks": [
+        {
+          "name": "onScanResultInternal",
+          "parameters": ["int", "int", "java.lang.String", "int", "int", "int", "int", "int", "int", "byte[]", "java.lang.String"],
+          "returns": "void",
+          "arguments": ["eventType", "addressType", "mac", "primaryPhy", "secondaryPhy", "advertisingSid", "txPower", "rssi", "periodicInterval", "data", "originalAddress"]
+        },
+        {
+          "name": "onScanResult",
+          "parameters": ["int", "int", "java.lang.String", "int", "int", "int", "int", "int", "int", "byte[]"],
+          "returns": "void",
+          "arguments": ["eventType", "addressType", "mac", "primaryPhy", "secondaryPhy", "advertisingSid", "txPower", "rssi", "periodicInterval", "data"]
+        }
+      ],
+      "intervalMs": 500
+    }
+  ]
+}
