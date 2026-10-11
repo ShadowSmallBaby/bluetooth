@@ -2,16 +2,22 @@ name: Build APKs
 
 on:
   push:
-    branches: [ master ]
     tags: [ 'v*' ]
   pull_request:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "build = 常规构建/发布; rules-only = 仅更新规则与清单到最新 Release(不改 APK/不打 tag)"
+        type: choice
+        options: [ build, rules-only ]
+        default: build
 
 permissions:
-  contents: write   # needed to create a Release and upload assets on tag push
+  contents: write
 
 jobs:
   build:
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.mode != 'rules-only'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -49,37 +55,29 @@ jobs:
             echo "No signing secrets found; release APKs will be debug-signed."
           fi
 
-      - name: Resolve version label
-        id: ver
-        run: |
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            echo "label=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "label=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Build modern + legacy APKs
         run: ./gradlew assembleModernRelease assembleLegacyRelease --console=plain --stacktrace
 
-      - name: Collect APKs (name carries the tag / commit)
+      - name: Collect release assets (fixed names for latest/download links)
         run: |
-          VERSION="${{ steps.ver.outputs.label }}"
           mkdir -p dist
-          cp app/build/outputs/apk/modern/release/*.apk "dist/bluetooth-modern-${VERSION}.apk"
-          cp app/build/outputs/apk/legacy/release/*.apk "dist/bluetooth-legacy-${VERSION}.apk"
+          cp app/build/outputs/apk/modern/release/*.apk dist/bluetooth-modern.apk
+          cp app/build/outputs/apk/legacy/release/*.apk dist/bluetooth-legacy.apk
+          cp app/src/main/resources/hook_rules.json dist/hook_rules.json
+          python3 scripts/gen_update_manual.py --out dist/update-manual.json
 
       - name: Upload workflow artifacts (every build)
         uses: actions/upload-artifact@v4
         with:
           name: apks
-          path: dist/*.apk
+          path: dist/*
           if-no-files-found: error
 
       - name: Publish to GitHub Release (on tag only)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.apk
+          files: dist/*
           fail_on_unmatched_files: true
           generate_release_notes: true
           body: |
@@ -87,9 +85,37 @@ jobs:
 
             | 包 | 适用框架 |
             |---|---|
-            | **bluetooth-modern-${{ github.ref_name }}.apk** | 现代 LibXposed，LSPosed **API ≥ 102**（较新 LSPosed / 新系统）。推荐优先尝试。 |
-            | **bluetooth-legacy-${{ github.ref_name }}.apk** | 经典 Xposed / 旧版 LSPosed / EdXposed（含 **API < 102**）。 |
+            | **bluetooth-modern.apk** | 现代 LibXposed，LSPosed **API ≥ 102** |
+            | **bluetooth-legacy.apk** | 经典 Xposed / 旧 LSPosed / EdXposed（含 **API < 102**） |
 
-            - 两个包**功能完全相同**，按你的框架版本**二选一**安装，不要同时装（同一包名会互相覆盖）。
-            - 若安装现代包后 LSPosed 提示「**该模块需要更新的 Xposed 版本 102**」，改用 **legacy** 包。
-            - 启用后在 LSPosed 里勾选作用域：**com.android.bluetooth** 与 **本应用自身**。
+            - 两个包**功能相同**，按框架版本**二选一**安装，不要同装。
+            - 现代包若提示「该模块需要更新的 Xposed 版本 102」，改用 **legacy** 包。
+            - 作用域勾选 **com.android.bluetooth**；**legacy 包**还需勾选**本应用自身**（用于激活检测）。
+            - `hook_rules.json` / `update-manual.json` 供 App 内「检查更新」使用，一般无需手动下载。
+
+  rules-only:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'rules-only'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Build manifest + rules (no APK rebuild)
+        run: |
+          mkdir -p dist
+          cp app/src/main/resources/hook_rules.json dist/hook_rules.json
+          python3 scripts/gen_update_manual.py --out dist/update-manual.json
+          cat dist/update-manual.json
+
+      - name: Upload to the latest Release (clobber existing assets)
+        run: |
+          LATEST="$(gh release view --json tagName -q .tagName)"
+          echo "Updating release $LATEST"
+          gh release upload "$LATEST" dist/update-manual.json dist/hook_rules.json --clobber
