@@ -123,24 +123,4 @@ object HookLogManager {
             }
         }
     }
-
-    /**
-     * 检查日志开关状态（用于设置界面显示）
-     * @return 当前日志开关状态
-     */
-    fun getLogStatus(): Boolean {
-        return isLogEnabled()
-    }
-
-    /**
-     * 强制重新加载配置
-     * 用于配置更新后刷新状态
-     */
-    fun reloadConfig() {
-        try {
-            preferences.reload()
-        } catch (e: Exception) {
-            // 忽略重载失败
-        }
-    }
 }

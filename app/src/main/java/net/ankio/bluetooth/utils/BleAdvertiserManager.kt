@@ -6,7 +6,6 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
-import android.bluetooth.le.BluetoothLeAdvertiser
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -29,7 +28,6 @@ object BleAdvertiserManager {
     const val BLUETOOTH_ENABLE_REQUEST_CODE = 1002
 
     object BroadcastConfig {
-        const val DEFAULT_MAC = "18:BC:5A:10:60:4D"
         const val DEFAULT_DATA = "02011A17FF0002317D89030000000F0295699D011000000003FE3C"
         const val DEFAULT_RSSI = -50
         // 48 字节上限（超过 BLE 传统广播 31 字节，需设备支持扩展广播）
@@ -60,17 +58,9 @@ object BleAdvertiserManager {
         fun isValidRssi(rssi: Int): Boolean {
             return rssi in -100..20
         }
-
-        /**
-         * 格式化MAC地址（统一使用冒号分隔）
-         */
-        fun formatMacAddress(mac: String): String {
-            return mac.uppercase().replace("-", ":")
-        }
     }
 
     object ServiceState {
-        private const val PREF_STATE_KEY = "ble_advertiser_state"
 
         fun setEnabled(context: Context, enabled: Boolean) {
             Log.d(TAG, "设置服务状态: enabled=$enabled")
@@ -261,23 +251,6 @@ object BleAdvertiserManager {
     }
 
     /**
-     * 更新广播配置
-     */
-    fun updateAdvertisingConfig(context: Context) {
-        try {
-            val intent = Intent(context, net.ankio.bluetooth.service.BleAdvertiserService::class.java).apply {
-                action = net.ankio.bluetooth.service.BleAdvertiserService.ACTION_UPDATE_CONFIG
-            }
-            context.startService(intent)
-
-            Log.i(TAG, "BLE广播配置更新请求已发送")
-
-        } catch (e: Exception) {
-            Log.e(TAG, "更新广播配置失败", e)
-        }
-    }
-
-    /**
      * 注册广播接收器监听Service事件
      */
     fun registerEventReceiver(context: Context, callback: (String, String?) -> Unit): BroadcastReceiver {
@@ -319,31 +292,6 @@ object BleAdvertiserManager {
      * 获取蓝牙开启请求代码
      */
     fun getBluetoothEnableRequestCode(): Int = BLUETOOTH_ENABLE_REQUEST_CODE
-
-    /**
-     * 获取BLE广播器实例（如果可用）
-     */
-    fun getBluetoothLeAdvertiser(context: Context): BluetoothLeAdvertiser? {
-        return try {
-            val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
-            bluetoothManager?.adapter?.bluetoothLeAdvertiser
-        } catch (e: Exception) {
-            Log.e(TAG, "获取BLE广播器时发生错误", e)
-            null
-        }
-    }
-
-    /**
-     * 检查服务是否正在运行
-     */
-    fun isServiceRunning(context: Context): Boolean {
-        return try {
-            SpUtils.getBoolean(PreferenceKeys.BLE_ADVERTISER_ENABLED, false)
-        } catch (e: Exception) {
-            Log.e(TAG, "检查服务状态时发生错误", e)
-            false
-        }
-    }
 
     /**
      * 兼容性检查结果
