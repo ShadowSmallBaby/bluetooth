@@ -2,7 +2,6 @@ package net.ankio.bluetooth.utils
 
 import android.util.Log
 import java.util.Locale
-import kotlin.experimental.xor
 
 /**
  *
@@ -11,6 +10,8 @@ import kotlin.experimental.xor
  * @date 2021/9/13 14:28
  */
 object ByteUtils {
+
+    private const val HEX_CHARS = "0123456789ABCDEF"
 
     /**
      * Convert hex string to byte[]
@@ -33,54 +34,25 @@ object ByteUtils {
     }
 
     /**
-     * Convert byte[] to string
+     * 将 BLE 广播原始字节按 AD 结构（TLV）截断尾部 0x00 填充，返回大写 HEX 字符串。
+     * 用于 UI 显示与配置存储的统一归一化：只保留有效 AD 段，不含填充。
      */
-    fun bytesToHexString(src: ByteArray?): String? {
-        val stringBuilder = StringBuilder("")
-        if (src == null || src.isEmpty()) {
-            return null
+    fun advDataToHexString(record: ByteArray?): String {
+        if (record == null || record.isEmpty()) return ""
+        var index = 0
+        var validEnd = 0
+        val size = record.size
+        while (index < size) {
+            val length = record[index].toInt() and 0xFF
+            if (length == 0) break
+            if (index + 1 + length > size) break
+            index += 1 + length
+            validEnd = index
         }
-        for (element in src) {
-            val v = element.toInt() and 0xFF
-            val hv = Integer.toHexString(v)
-            if (hv.length < 2) {
-                stringBuilder.append(0)
-            }
-            stringBuilder.append(hv)
-        }
-        return stringBuilder.toString()
-    }
-
-
-    fun byteToHexString(src: Byte): String = Integer.toHexString((src.toInt() and 0xFF))
-
-    /**
-     * 亦或校验(BCC校验)
-     *
-     * @param datas
-     * @return
-     */
-    fun getBCCResult(datas: ByteArray): Byte {
-        var temp = datas[0]
-        for (i in 1 until datas.size) {
-            temp = temp xor datas[i]
-        }
-        return temp
-    }
-
-    fun getBCCResult(hexString: String): String {
-        val byteToHexString = byteToHexString(getBCCResult(hexStringToBytes(hexString)))
-        return if (byteToHexString.length < 2) "0$byteToHexString" else byteToHexString
-    }
-
-    fun byteArrayToHexString(byteArray: ByteArray): String {
-        val sb = StringBuilder()
-        for (i in byteArray.indices) {
-            var hex = Integer.toHexString((byteArray[i]).toInt() and 0xFF)
-            if (hex.length == 1) {
-                hex = "0$hex"
-                sb.append(hex.uppercase(Locale.getDefault()))
-            }
+        val sb = StringBuilder(validEnd * 2)
+        for (i in 0 until validEnd) {
+            val v = record[i].toInt() and 0xFF
+            sb.append(HEX_CHARS[v shr 4]).append(HEX_CHARS[v and 0x0F])
         }
         return sb.toString()
     }
@@ -91,6 +63,6 @@ object ByteUtils {
      * @param c char
      * @return byte
      */
-    private fun charToByte(c: Char): Byte = "0123456789ABCDEF".indexOf(c).toByte()
+    private fun charToByte(c: Char): Byte = HEX_CHARS.indexOf(c).toByte()
 
 }

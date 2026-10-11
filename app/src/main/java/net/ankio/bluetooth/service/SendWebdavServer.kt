@@ -79,7 +79,7 @@ class SendWebdavServer : Service() {
                                 SpUtils.getString(PreferenceKeys.WEBDAV_PASSWORD, "")
                             ).sendToServer(
                                 net.ankio.bluetooth.bluetooth.BluetoothData(
-                                    ByteUtils.bytesToHexString(scanRecord)?:"",
+                                    ByteUtils.advDataToHexString(scanRecord),
                                     result.device.address,
                                     result.rssi.toString()
                                 )
