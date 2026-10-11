@@ -1,4 +1,5 @@
 package net.ankio.bluetooth
+import net.ankio.bluetooth.config.PreferenceKeys
 
 import android.annotation.SuppressLint
 import android.app.Application
@@ -21,7 +22,7 @@ open class App : Application() {
         }
 
         fun getLocale(): Locale? {
-            val tag: String = SpUtils.getString("setting_language", "SYSTEM")
+            val tag: String = SpUtils.getString(PreferenceKeys.LANGUAGE, "SYSTEM")
             return getLocale(tag)
         }
 
@@ -32,12 +33,14 @@ open class App : Application() {
     override fun onCreate() {
         super.onCreate()
         context = applicationContext
+        // Flavor-specific: modern binds the LibXposed service, legacy is a no-op.
+        ActivationSupport.install(this)
         ThemeEngine.applyToActivities(this)
         //设置语言
         LocaleDelegate.defaultLocale = getLocale()
 
         //匿名统计
-        if (SpUtils.getBoolean("app_center_analyze", true)) {
+        if (SpUtils.getBoolean(PreferenceKeys.ANALYZE, true)) {
             FlurryAgent.Builder()
                 .withLogEnabled(true)
                 .build(this, "JS6H7TJJDMQRDDMWG55C")

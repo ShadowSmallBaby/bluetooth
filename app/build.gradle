@@ -1,19 +1,20 @@
 plugins {
     id 'com.android.application'
-    id 'org.jetbrains.kotlin.android'
-    id 'dev.rikka.tools.autoresconfig'
 }
 
 android {
     namespace 'net.ankio.bluetooth'
-    compileSdk 33
+    // Keep the legacy Xposed runtime while compiling against the current SDK.
+    // Raising compile/target SDK does not remove support for Android 7+ devices.
+    compileSdk 37
 
     defaultConfig {
         applicationId "net.ankio.bluetooth"
         minSdk 24
-        targetSdk 33
+        targetSdk 37
         versionCode 11
         versionName "1.0.9"
+        resourceConfigurations += ['en', 'zh-rCN']
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         ndk {
@@ -22,42 +23,68 @@ android {
         }
     }
 
+    signingConfigs {
+        // Populated from environment variables (CI secrets) when present; otherwise the release
+        // build falls back to the debug key so local/CI builds without secrets still succeed.
+        release {
+            def ksPath = System.getenv('BT_KEYSTORE_PATH')
+            if (ksPath) {
+                storeFile file(ksPath)
+                storePassword System.getenv('BT_STORE_PASSWORD')
+                keyAlias System.getenv('BT_KEY_ALIAS')
+                keyPassword System.getenv('BT_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.debug
+            signingConfig System.getenv('BT_KEYSTORE_PATH') ? signingConfigs.release : signingConfigs.debug
         }
     }
+    flavorDimensions "framework"
+    productFlavors {
+        // Modern LibXposed (API 102+): module.prop + java_init.list + XposedService bridge.
+        modern { dimension "framework" }
+        // Legacy Xposed (assets/xposed_init); runs on every LSPosed/EdXposed, incl. API < 102.
+        legacy { dimension "framework" }
+    }
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = '1.8'
+    buildFeatures {
+        buildConfig = true
+        viewBinding = true
     }
-    //使用viewBinding
-    viewBinding {
-        enabled = true
+    lint {
+        // Release APKs here are debug-signed and shipped as CI artifacts; skip the vital lint
+        // pass so a transient lint-tool download or a non-fatal warning never blocks the build.
+        checkReleaseBuilds false
     }
-    autoResConfig {
-        generateClass.set(true)
-        generateRes.set(false)
-        generatedClassFullName.set("net.ankio.utils.LangList")
-        generatedArrayFirstItem.set("SYSTEM")
+    packaging {
+        resources {
+            excludes += [
+                'META-INF/DEPENDENCIES',
+                'META-INF/LICENSE',
+                'META-INF/LICENSE.md',
+                'META-INF/LICENSE.txt',
+                'META-INF/NOTICE',
+                'META-INF/NOTICE.txt',
+                'META-INF/NOTICE.md',
+                'META-INF/ASL2.0',
+                'META-INF/gson/FieldAttributes.txt',
+                'META-INF/gson/LongSerializationPolicy.txt',
+                'META-INF/gson/annotations.txt'
+            ]
+        }
     }
-    packagingOptions {
-        exclude 'META-INF/DEPENDENCIES'
-        exclude 'META-INF/LICENSE'
-        exclude 'META-INF/LICENSE.md'
-        exclude 'META-INF/LICENSE.txt'
-        exclude 'META-INF/NOTICE'
-        exclude 'META-INF/NOTICE.txt'
-        exclude 'META-INF/NOTICE.md'
-        exclude 'META-INF/ASL2.0'
-        exclude 'META-INF/gson/FieldAttributes.txt'
-        exclude 'META-INF/gson/LongSerializationPolicy.txt'
-        exclude 'META-INF/gson/annotations.txt'
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
 }
 
@@ -90,5 +117,11 @@ dependencies {
     //让你的适配器一目了然，告别代码冗余
     implementation 'com.github.CymChad:BaseRecyclerViewAdapterHelper:3.0.4'
     //Xposed组件库
+    // The module still uses the legacy callback API so it remains compatible
+    // with LSPosed legacy mode and older EdXposed installations.
     compileOnly 'de.robv.android.xposed:api:82'
+    // Optional modern LibXposed API. Legacy frameworks ignore this metadata.
+    compileOnly 'io.github.libxposed:api:102.0.0'
+    // Modern LibXposed service (modern flavor only): activation + remote-preference bridge.
+    modernImplementation 'io.github.libxposed:service:102.0.0'
 }

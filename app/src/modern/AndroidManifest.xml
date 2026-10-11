@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- The LibXposed service declares minSdk 26; it is only exercised on modern frameworks
+         (ModernEntry is @RequiresApi(O)) and its registration is guarded, so keep app minSdk 24. -->
+    <uses-sdk tools:overrideLibrary="io.github.libxposed.service,io.github.libxposed.service.interfaces" />
+
+    <application>
+        <!-- Lets the modern LibXposed framework bind its service to this app (activation + prefs). -->
+        <provider
+            android:name="io.github.libxposed.service.XposedProvider"
+            android:authorities="${applicationId}.XposedService"
+            android:exported="true" />
+    </application>
+
+</manifest>

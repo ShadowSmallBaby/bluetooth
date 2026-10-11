@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string-array name="supported_languages" translatable="false">
+        <item>SYSTEM</item>
+        <item>en</item>
+        <item>zh-CN</item>
+    </string-array>
     <string-array name="xposed_scope">
         <item>com.android.bluetooth</item>
+        <item>net.ankio.bluetooth</item>
     </string-array>
 </resources>
