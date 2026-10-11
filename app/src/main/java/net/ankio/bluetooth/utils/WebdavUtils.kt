@@ -3,7 +3,6 @@ import net.ankio.bluetooth.config.PreferenceKeys
 
 
 import android.util.Log
-import android.widget.Toast
 import com.google.gson.Gson
 import com.thegrizzlylabs.sardineandroid.Sardine
 import com.thegrizzlylabs.sardineandroid.impl.OkHttpSardine

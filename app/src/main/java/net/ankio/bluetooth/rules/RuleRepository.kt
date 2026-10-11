@@ -2,7 +2,6 @@ package net.ankio.bluetooth.rules
 
 import net.ankio.bluetooth.hook.model.HookRules
 import java.io.InputStream
-import java.util.zip.ZipFile
 
 interface RuleStore {
     val active: String?
@@ -34,8 +33,6 @@ class RuleRepository(private val bundled: String, private val store: RuleStore) 
         return SelectedRules(parsed, previous, "previous")
     }
 
-    fun reset() = store.replace(null, null)
-
     companion object {
         fun candidates(active: String?, previous: String?, bundled: String): List<SelectedRules> =
             listOf("custom" to active, "previous" to previous, "bundled" to bundled)
@@ -44,13 +41,6 @@ class RuleRepository(private val bundled: String, private val store: RuleStore) 
                         SelectedRules(HookRules.parse(json), json, source)
                     } catch (_: Exception) { null }
                 }.distinctBy { it.rules }
-
-        fun readBundledApk(moduleApk: String): String = ZipFile(moduleApk).use { zip ->
-            // Rules ship as a Java resource packaged at the APK root; the single source of truth is
-            // app/src/main/resources/hook_rules.json.
-            val entry = zip.getEntry("hook_rules.json") ?: error("Module has no bundled hook rules")
-            zip.getInputStream(entry).use(::readLimited)
-        }
 
         fun readLimited(input: InputStream): String {
             val output = java.io.ByteArrayOutputStream()

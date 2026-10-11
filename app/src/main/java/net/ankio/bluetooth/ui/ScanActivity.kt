@@ -6,9 +6,7 @@ import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
-import android.bluetooth.le.ScanSettings
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -18,7 +16,6 @@ import android.text.TextUtils
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.view.marginBottom
@@ -76,7 +73,7 @@ class ScanActivity : BaseActivity() {
     //注册开启蓝牙  注意在onCreate之前注册
     private val activityResult =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-            if (it.resultCode == Activity.RESULT_OK) showMsg(if (defaultAdapter.isEnabled) "蓝牙已打开" else "蓝牙未打开")
+            if (it.resultCode == RESULT_OK) showMsg(if (defaultAdapter.isEnabled) "蓝牙已打开" else "蓝牙未打开")
         }
 
 
@@ -178,7 +175,7 @@ class ScanActivity : BaseActivity() {
             if (isScanning) stopScan()
             else scan()
         }
-        toolbar.setOnMenuItemClickListener { it ->
+        toolbar.setOnMenuItemClickListener {
             if(it.itemId == R.id.filter){
                 val _scan = isScanning
                 stopScan()
@@ -298,7 +295,8 @@ class ScanActivity : BaseActivity() {
             }
             scanner.startScan(scanCallback)
         }catch (_:SecurityException){
-            showMsg(R.string.no_permission);return;
+            showMsg(R.string.no_permission)
+            return
         }
 
         isScanning = true
@@ -317,14 +315,16 @@ class ScanActivity : BaseActivity() {
         mList.clear()
       
         if (!::defaultAdapter.isInitialized || !defaultAdapter.isEnabled) {
-            showMsg(getString(R.string.not_open_bluetooth));return
+            showMsg(getString(R.string.not_open_bluetooth))
+            return
         }
         if (isScanning) {
             isScanning = false
            try{
                defaultAdapter.bluetoothLeScanner?.stopScan(scanCallback)
            }catch (_:SecurityException){
-               showMsg(R.string.no_permission);return;
+               showMsg(R.string.no_permission)
+               return
            }
             binding.progressBar.visibility = View.INVISIBLE
             binding.fabAdd.text = getString(R.string.start_scan)
