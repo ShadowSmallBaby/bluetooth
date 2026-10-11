@@ -2,7 +2,6 @@ package net.ankio.bluetooth.utils
 
 import android.app.Activity
 import android.content.res.Configuration
-import android.text.TextUtils
 import net.ankio.bluetooth.ui.BaseActivity
 
 import java.util.Locale
@@ -29,7 +28,7 @@ class LocaleDelegate {
      * @param configuration Configuration
      */
     fun updateConfiguration(configuration: Configuration) {
-        locale = defaultLocale
+        locale = defaultLocale ?: Locale.getDefault()
 
         configuration.setLocale(locale)
     }
