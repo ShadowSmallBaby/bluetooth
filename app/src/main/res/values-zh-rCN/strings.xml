@@ -74,4 +74,14 @@
     <string name="ble_advertiser_desc">作为BLE外围设备广播模拟数据</string>
     <string name="ble_advertiser_active">正在作为BLE设备广播</string>
     <string name="ble_advertiser_inactive">BLE外围服务已关闭</string>
+    <string name="hook_rules_title">Hook规则</string>
+    <string name="hook_rules_update">更新规则</string>
+    <string name="hook_rules_rollback">回退规则</string>
+    <string name="hook_rules_rollback_desc">恢复到上一次安装的规则</string>
+    <string name="hook_rules_status">当前规则：版本 %1$d（来源：%2$s）</string>
+    <string name="hook_rules_status_unknown">规则不可用</string>
+    <string name="hook_rules_updating">正在更新规则…</string>
+    <string name="hook_rules_updated">规则已更新到版本 %1$d</string>
+    <string name="hook_rules_unchanged">规则已是最新</string>
+    <string name="hook_rules_failed">规则更新失败：%1$s</string>
 </resources>

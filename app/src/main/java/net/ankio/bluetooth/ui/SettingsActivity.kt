@@ -7,7 +7,10 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.EditText
+import android.widget.Toast
 import androidx.appcompat.widget.ListPopupWindow
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.core.text.HtmlCompat
 import com.quickersilver.themeengine.ThemeChooserDialogBuilder
 import com.quickersilver.themeengine.ThemeEngine
@@ -15,17 +18,24 @@ import com.quickersilver.themeengine.ThemeMode
 import net.ankio.bluetooth.App
 import net.ankio.bluetooth.BuildConfig
 import net.ankio.bluetooth.R
+import net.ankio.bluetooth.config.PreferenceKeys
 import net.ankio.bluetooth.databinding.SettingsActivityBinding
+import net.ankio.bluetooth.hook.HookBootstrap
+import net.ankio.bluetooth.rules.RuleRepository
+import net.ankio.bluetooth.rules.RuleUpdater
+import net.ankio.bluetooth.rules.SharedPreferencesRuleStore
 import net.ankio.bluetooth.utils.CustomTabsHelper
-import net.ankio.bluetooth.utils.HookLogManager
 import net.ankio.bluetooth.utils.LocaleDelegate
 import net.ankio.bluetooth.utils.SpUtils
-import net.ankio.utils.LangList
 import java.util.Locale
 
 
 class SettingsActivity : BaseActivity() {
     private lateinit var binding: SettingsActivityBinding
+    private val ruleRepository by lazy {
+        RuleRepository(HookBootstrap.bundledRules(javaClass.classLoader!!), SharedPreferencesRuleStore())
+    }
+    private val ruleUpdater by lazy { RuleUpdater(ruleRepository) }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = SettingsActivityBinding.inflate(layoutInflater)
@@ -41,16 +51,17 @@ class SettingsActivity : BaseActivity() {
          //toolbar 设置返回
         toolbar.setNavigationOnClickListener { finish(); }
          //匿名分析
-         SpUtils.getBoolean("app_center_analyze",true).apply { binding.analyze.isChecked = this }
+         SpUtils.getBoolean(PreferenceKeys.ANALYZE,true).apply { binding.analyze.isChecked = this }
          binding.AnalyzeView.setOnClickListener {
              binding.analyze.isChecked = !binding.analyze.isChecked
-             SpUtils.putBoolean("app_center_analyze",binding.analyze.isChecked )
+             SpUtils.putBoolean(PreferenceKeys.ANALYZE,binding.analyze.isChecked )
          }
-         binding.analyze.setOnCheckedChangeListener { _, isChecked ->  SpUtils.putBoolean("app_center_analyze",isChecked ) }
+         binding.analyze.setOnCheckedChangeListener { _, isChecked ->  SpUtils.putBoolean(PreferenceKeys.ANALYZE,isChecked ) }
          //语言配置
          val languages: ArrayList<String> = ArrayList()
+         val languageTags = resources.getStringArray(R.array.supported_languages)
 
-         LangList.LOCALES.forEach {
+         languageTags.forEach {
              if (it.equals("SYSTEM")) {
                  languages.add(getString(R.string.lang_follow_system))
              }else{
@@ -61,7 +72,7 @@ class SettingsActivity : BaseActivity() {
              }
          }
 
-         SpUtils.getString("setting_language","SYSTEM").apply { binding.settingLangDesc.text = if (this == "SYSTEM") getString(R.string.lang_follow_system) else Locale.forLanguageTag(this).displayName }
+         SpUtils.getString(PreferenceKeys.LANGUAGE,"SYSTEM").apply { binding.settingLangDesc.text = if (this == "SYSTEM") getString(R.string.lang_follow_system) else Locale.forLanguageTag(this).displayName }
 
 
 
@@ -74,9 +85,9 @@ class SettingsActivity : BaseActivity() {
          listPopupWindow.width = WindowManager.LayoutParams.WRAP_CONTENT
 
          listPopupWindow.setOnItemClickListener { _: AdapterView<*>?, _: View?, position: Int, _: Long ->
-             val value = LangList.LOCALES[position]
+             val value = languageTags[position]
              binding.settingLangDesc.text = languages[position]
-             SpUtils.putString("setting_language",value)
+             SpUtils.putString(PreferenceKeys.LANGUAGE,value)
              val locale = App.getLocale(value)
              if(locale===null)return@setOnItemClickListener
              listPopupWindow.dismiss()
@@ -171,11 +182,11 @@ class SettingsActivity : BaseActivity() {
              recreateInit()
          }
 
-         SpUtils.getBoolean("hide_icon",false).apply {
+         SpUtils.getBoolean(PreferenceKeys.HIDE_ICON,false).apply {
              binding.hideIconSwitch.isChecked = this
          }
          fun setHideIcon(isChecked:Boolean){
-             SpUtils.putBoolean("hide_icon",isChecked)
+             SpUtils.putBoolean(PreferenceKeys.HIDE_ICON,isChecked)
              val component = ComponentName(this, BuildConfig.APPLICATION_ID+".MainActivityLauncher")
              val status =
                  if (isChecked) PackageManager.COMPONENT_ENABLED_STATE_DISABLED
@@ -189,12 +200,12 @@ class SettingsActivity : BaseActivity() {
          binding.hideIconSwitch.setOnCheckedChangeListener { _, isChecked ->  setHideIcon(isChecked ) }
 
         // Hook日志开关设置
-        SpUtils.getBoolean("pref_hook_log_enabled", false).apply {
+        SpUtils.getBoolean(PreferenceKeys.HOOK_LOG, false).apply {
             binding.hookLogSwitch.isChecked = this
         }
 
         fun setHookLogEnabled(isChecked: Boolean) {
-            SpUtils.putBoolean("pref_hook_log_enabled", isChecked)
+            SpUtils.putBoolean(PreferenceKeys.HOOK_LOG, isChecked)
         }
 
         binding.hookLogSetting.setOnClickListener {
@@ -206,7 +217,68 @@ class SettingsActivity : BaseActivity() {
             setHookLogEnabled(isChecked)
         }
 
+        setupRuleUpdate()
      }
+
+    private fun setupRuleUpdate() {
+        refreshRuleStatus()
+        binding.hookRuleUpdate.setOnClickListener { showRuleUpdateDialog() }
+        binding.hookRuleRollback.setOnClickListener { performRollback() }
+    }
+
+    private fun refreshRuleStatus() {
+        val current = runCatching { ruleRepository.current() }.getOrNull()
+        binding.hookRuleStatus.text = if (current == null) {
+            getString(R.string.hook_rules_status_unknown)
+        } else {
+            getString(R.string.hook_rules_status, current.rules.revision, current.source)
+        }
+    }
+
+    private fun showRuleUpdateDialog() {
+        val input = EditText(this).apply {
+            setText(SpUtils.getString(PreferenceKeys.RULE_URL, ""))
+            hint = "https://..."
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.hook_rules_update)
+            .setView(input)
+            .setPositiveButton(R.string.ok) { _, _ ->
+                val url = input.text.toString().trim()
+                if (url.isEmpty()) return@setPositiveButton
+                SpUtils.putString(PreferenceKeys.RULE_URL, url)
+                performUpdate(url)
+            }
+            .setNegativeButton(R.string.close, null)
+            .show()
+    }
+    private fun performUpdate(url: String) {
+        Toast.makeText(this, R.string.hook_rules_updating, Toast.LENGTH_SHORT).show()
+        Thread {
+            val result = ruleUpdater.updateFrom(url)
+            runOnUiThread { handleRuleResult(result) }
+        }.start()
+    }
+
+    private fun performRollback() {
+        Thread {
+            val result = ruleUpdater.rollback()
+            runOnUiThread { handleRuleResult(result) }
+        }.start()
+    }
+
+    private fun handleRuleResult(result: RuleUpdater.Result) {
+        when (result) {
+            is RuleUpdater.Result.Updated -> {
+                refreshRuleStatus()
+                Toast.makeText(this, getString(R.string.hook_rules_updated, result.revision), Toast.LENGTH_SHORT).show()
+            }
+            is RuleUpdater.Result.Unchanged ->
+                Toast.makeText(this, R.string.hook_rules_unchanged, Toast.LENGTH_SHORT).show()
+            is RuleUpdater.Result.Failed ->
+                Toast.makeText(this, getString(R.string.hook_rules_failed, result.reason), Toast.LENGTH_LONG).show()
+        }
+    }
 
 
 

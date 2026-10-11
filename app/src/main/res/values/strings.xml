@@ -77,4 +77,14 @@
     <string name="ble_advertiser_desc">Broadcast as a BLE peripheral device with simulated data</string>
     <string name="ble_advertiser_active">Broadcasting as BLE device</string>
     <string name="ble_advertiser_inactive">BLE peripheral service disabled</string>
+    <string name="hook_rules_title">Hook rules</string>
+    <string name="hook_rules_update">Update rules</string>
+    <string name="hook_rules_rollback">Roll back rules</string>
+    <string name="hook_rules_rollback_desc">Restore the previously installed rules</string>
+    <string name="hook_rules_status">Current rules: revision %1$d (source: %2$s)</string>
+    <string name="hook_rules_status_unknown">Rules unavailable</string>
+    <string name="hook_rules_updating">Updating rules…</string>
+    <string name="hook_rules_updated">Rules updated to revision %1$d</string>
+    <string name="hook_rules_unchanged">Rules are already up to date</string>
+    <string name="hook_rules_failed">Rule update failed: %1$s</string>
 </resources>
