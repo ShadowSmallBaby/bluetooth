@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import android.widget.Toast
@@ -56,8 +57,10 @@ fun MainScreen(activity: MainActivity) {
             lifecycle.lifecycle.addObserver(observer)
             onDispose { lifecycle.lifecycle.removeObserver(observer) }
         }
-        LaunchedEffect(home) {
-            while (true) { home.refreshStatus(); delay(1000) }
+        LaunchedEffect(home, lifecycle) {
+            lifecycle.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) { home.refreshStatus(); delay(1000) }
+            }
         }
         LaunchedEffect(home.message) {
             home.message?.let { Toast.makeText(activity, it, Toast.LENGTH_LONG).show(); home.message = null }

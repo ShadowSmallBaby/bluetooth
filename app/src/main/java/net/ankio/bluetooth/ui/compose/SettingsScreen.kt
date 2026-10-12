@@ -2,6 +2,7 @@ package net.ankio.bluetooth.ui.compose
 
 import android.content.ComponentName
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.*
@@ -12,14 +13,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import net.ankio.bluetooth.BuildConfig
 import net.ankio.bluetooth.R
 import net.ankio.bluetooth.config.PreferenceKeys as Keys
-import net.ankio.bluetooth.hook.HookBootstrap
-import net.ankio.bluetooth.rules.*
+import androidx.lifecycle.viewmodel.compose.viewModel
+import net.ankio.bluetooth.ui.viewmodel.SettingsViewModel
 import net.ankio.bluetooth.ui.MainActivity
 import net.ankio.bluetooth.update.UpdateChecker
 import net.ankio.bluetooth.utils.*
@@ -30,34 +28,10 @@ import org.json.JSONObject
 import java.util.Locale
 
 @Composable
-fun SettingsScreen(activity: MainActivity) {
+fun SettingsScreen(activity: MainActivity, model: SettingsViewModel = viewModel()) {
     var dialog by rememberSaveable { mutableStateOf("") }
-    val repository = remember { RuleRepository(HookBootstrap.bundledRules(activity.javaClass.classLoader!!), SharedPreferencesRuleStore()) }
-    val updater = remember { RuleUpdater(repository) }
-    val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
-    var feedback by rememberSaveable { mutableStateOf<String?>(null) }
-    var revision by remember { mutableStateOf(runCatching { repository.current() }.getOrNull()) }
-    var available by remember { mutableStateOf<UpdateChecker.Result.Ok?>(null) }
-    fun update(url: String? = null) {
-        if (busy) return
-        if (url == null && !repository.hasPrevious()) {
-            feedback = activity.getString(R.string.hook_rules_no_previous); return
-        }
-        busy = true
-        scope.launch {
-            try {
-                val result = withContext(Dispatchers.IO) { if (url == null) updater.rollback() else updater.updateFrom(url) }
-                feedback = when (result) {
-                    is RuleUpdater.Result.Updated -> activity.getString(R.string.hook_rules_updated, result.revision)
-                    is RuleUpdater.Result.Unchanged -> activity.getString(R.string.hook_rules_unchanged)
-                    is RuleUpdater.Result.Failed -> activity.getString(R.string.hook_rules_failed, result.reason)
-                }
-                revision = runCatching { repository.current() }.getOrNull()
-                if (url != null && result !is RuleUpdater.Result.Failed) SpUtils.putString(Keys.RULE_URL, "")
-            } finally { busy = false }
-        }
-    }
+    val busy = model.busy
+    val revision = model.revision
     Page {
         SmallTitle(stringResource(R.string.theme_group))
         Card {
@@ -96,6 +70,15 @@ fun SettingsScreen(activity: MainActivity) {
             val log = preference(Keys.HOOK_LOG) { SpUtils.getBoolean(Keys.HOOK_LOG) }
             SwitchPreference(title = stringResource(R.string.hook_log_title), summary = stringResource(R.string.hook_log_desc),
                 checked = log, onCheckedChange = { SpUtils.putBoolean(Keys.HOOK_LOG, it) })
+            val compatibilityRequired = BleAdvertisingMode.isCompatibilityRequired(Build.VERSION.SDK_INT)
+            val compatibility = preference(Keys.BLE_ADVERTISER_COMPATIBILITY) {
+                BleAdvertiserManager.isCompatibilityModeEnabled()
+            }
+            SwitchPreference(title = stringResource(R.string.ble_advertiser_compatibility),
+                summary = stringResource(if (compatibilityRequired) R.string.ble_advertiser_compatibility_required
+                    else R.string.ble_advertiser_compatibility_desc),
+                checked = compatibility, enabled = !compatibilityRequired,
+                onCheckedChange = { if (!compatibilityRequired) SpUtils.putBoolean(Keys.BLE_ADVERTISER_COMPATIBILITY, it) })
         }
         SmallTitle(stringResource(R.string.hook_rules_title))
         Card {
@@ -112,7 +95,7 @@ fun SettingsScreen(activity: MainActivity) {
             ArrowPreference(title = stringResource(R.string.hook_rules_current), enabled = revision != null,
                 summary = stringResource(R.string.hook_rules_current_desc), onClick = { dialog = "json" })
             ArrowPreference(title = stringResource(R.string.hook_rules_rollback), enabled = !busy,
-                summary = stringResource(R.string.hook_rules_rollback_desc), onClick = { update() })
+                summary = stringResource(R.string.hook_rules_rollback_desc), onClick = { model.update() })
         }
         SmallTitle(stringResource(R.string.nav_about))
         Card {
@@ -130,18 +113,7 @@ fun SettingsScreen(activity: MainActivity) {
                 fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
             ArrowPreference(title = stringResource(R.string.check_update_title), enabled = !busy,
                 summary = stringResource(if (busy) R.string.update_checking else R.string.check_update_desc),
-                onClick = {
-                    busy = true
-                    scope.launch {
-                        try {
-                            when (val result = withContext(Dispatchers.IO) { UpdateChecker.check(revision?.rules?.revision ?: 0) }) {
-                                is UpdateChecker.Result.Failed -> feedback = activity.getString(R.string.update_failed, result.reason)
-                                is UpdateChecker.Result.Ok -> if (result.appUpdate || result.rulesUpdate) available = result
-                                    else feedback = activity.getString(R.string.update_none)
-                            }
-                        } finally { busy = false }
-                    }
-                })
+                onClick = model::checkForUpdates)
             ArrowPreference(title = stringResource(R.string.project_home), summary = stringResource(R.string.source_code),
                 onClick = { CustomTabsHelper.launchUrlOrCopy(activity, "https://github.com/ShadowSmallBaby/bluetooth") })
         }
@@ -152,7 +124,7 @@ fun SettingsScreen(activity: MainActivity) {
             TextButton(stringResource(R.string.cancel), onClick = { dialog = "" }, modifier = Modifier.weight(1f))
             TextButton(stringResource(R.string.save), onClick = {
                 val url = SpUtils.getString(Keys.RULE_URL).trim()
-                if (url.isNotEmpty()) { dialog = ""; update(url) }
+                if (url.isNotEmpty()) { dialog = ""; model.update(url) }
             }, modifier = Modifier.weight(1f))
         }
     }
@@ -164,16 +136,20 @@ fun SettingsScreen(activity: MainActivity) {
             Text(pretty)
         }
     }
-    feedback?.let { ChoiceDialog(stringResource(R.string.hook_rules_title), { feedback = null }) { Text(it) } }
-    available?.let { result ->
-        ChoiceDialog(stringResource(R.string.update_found), { available = null }) {
+    model.feedback?.let { feedback ->
+        ChoiceDialog(stringResource(R.string.hook_rules_title), model::dismissFeedback) {
+            Text(stringResource(feedback.message, *feedback.arguments.toTypedArray()))
+        }
+    }
+    model.available?.let { result ->
+        ChoiceDialog(stringResource(R.string.update_found), model::dismissUpdate) {
             if (result.appUpdate) {
                 Text(stringResource(R.string.update_app_available, result.latestVersionName))
                 TextButton(stringResource(R.string.update_download_apk), onClick = { CustomTabsHelper.launchUrlOrCopy(activity, UpdateChecker.apkUrl) })
             }
             if (result.rulesUpdate) {
                 Text(stringResource(R.string.update_rules_available, result.latestRevision))
-                TextButton(stringResource(R.string.update_rules_now), onClick = { available = null; update(UpdateChecker.RULES_URL) })
+                TextButton(stringResource(R.string.update_rules_now), onClick = { model.dismissUpdate(); model.update(UpdateChecker.RULES_URL) })
             }
         }
     }
