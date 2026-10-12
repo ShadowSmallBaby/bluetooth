@@ -8,14 +8,28 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -34,6 +48,7 @@ fun ScanScreen(close: () -> Unit, model: ScanViewModel = viewModel()) {
     var filtering by rememberSaveable { mutableStateOf(false) }
     var restart by rememberSaveable { mutableStateOf(false) }
     var pending by remember { mutableStateOf<net.ankio.bluetooth.bluetooth.BleDevice?>(null) }
+    var deletePending by remember { mutableStateOf<net.ankio.bluetooth.bluetooth.BleDevice?>(null) }
     val bluetooth = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         if (it.resultCode == android.app.Activity.RESULT_OK) model.start()
         else model.message = context.getString(R.string.not_open_bluetooth)
@@ -95,12 +110,51 @@ fun ScanScreen(close: () -> Unit, model: ScanViewModel = viewModel()) {
             verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 12.dp)) {
             if (model.devices.isEmpty()) item { Text(stringResource(R.string.ic_empty), Modifier.padding(24.dp)) }
             items(model.devices, key = { it.address }) { device ->
-                Card {
-                    ArrowPreference(title = device.name ?: "None",
-                        summary = "${device.company}\n${device.address}  •  ${device.rssi} dBm\n${device.data}",
-                        onClick = { pending = device })
-                    if (model.showingHistory) TextButton(stringResource(R.string.delete_history),
-                        onClick = { model.delete(device) })
+                if (model.showingHistory) {
+                    var offset by remember { mutableFloatStateOf(0f) }
+                    val revealWidth = with(LocalDensity.current) { 72.dp.toPx() }
+                    val revealed = with(LocalDensity.current) { (-offset).toDp() }
+                    val cardShape = RoundedCornerShape(
+                        topStart = 16.dp, bottomStart = 16.dp,
+                        topEnd = if (offset < 0f) 0.dp else 16.dp,
+                        bottomEnd = if (offset < 0f) 0.dp else 16.dp)
+                    val deleteLabel = stringResource(R.string.delete)
+                    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))) {
+                        Box(Modifier.matchParentSize(), contentAlignment = Alignment.CenterEnd) {
+                            if (offset < 0f) Box(
+                                Modifier.width(revealed).fillMaxHeight().clip(RoundedCornerShape(0.dp))
+                                    .background(MiuixTheme.colorScheme.error)
+                                    .semantics { contentDescription = deleteLabel }
+                                    .clickable(role = Role.Button) { deletePending = device },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(stringResource(R.string.delete_vertical),
+                                    color = Color.White, textAlign = TextAlign.Center)
+                            }
+                        }
+                        Card(Modifier.padding(end = revealed).clip(cardShape).pointerInput(revealWidth) {
+                            detectHorizontalDragGestures(
+                                onDragCancel = { offset = 0f },
+                                onDragEnd = { offset = if (offset < -revealWidth / 2) -revealWidth else 0f }) { change, drag ->
+                                change.consume()
+                                offset = (offset + drag).coerceIn(-revealWidth, 0f)
+                            }
+                        }, cornerRadius = 0.dp) {
+                            ArrowPreference(
+                                title = device.name ?: "None",
+                                summary = "${device.company}\n${device.address}  •  ${device.rssi} dBm",
+                                bottomAction = {
+                                    Text(device.data, modifier = Modifier.fillMaxWidth(),
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                        minLines = if (offset < 0f) 3 else 1,
+                                        maxLines = if (offset < 0f) 3 else Int.MAX_VALUE,
+                                        overflow = TextOverflow.Ellipsis)
+                                },
+                                onClick = { pending = device })
+                        }
+                    }
+                } else Card {
+                    ArrowPreference(title = device.name ?: "None", summary = "${device.company}\n${device.address}  •  ${device.rssi} dBm\n${device.data}", onClick = { pending = device })
                 }
             }
         }
@@ -127,6 +181,15 @@ fun ScanScreen(close: () -> Unit, model: ScanViewModel = viewModel()) {
                 TextButton(stringResource(R.string.cancel), onClick = { pending = null }, modifier = Modifier.weight(1f))
                 TextButton(stringResource(R.string.ok), onClick = { if (model.select(device)) { pending = null; close() } },
                     modifier = Modifier.weight(1f))
+            }
+        }
+    }
+    deletePending?.let { device ->
+        ChoiceDialog(stringResource(R.string.delete_history), { deletePending = null }, showClose = false) {
+            Text(stringResource(R.string.delete_history_confirm), color = MiuixTheme.colorScheme.onSurface)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(stringResource(R.string.cancel), onClick = { deletePending = null }, modifier = Modifier.weight(1f))
+                TextButton(stringResource(R.string.delete), onClick = { model.delete(device); deletePending = null }, modifier = Modifier.weight(1f))
             }
         }
     }

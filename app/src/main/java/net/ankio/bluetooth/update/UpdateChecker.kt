@@ -18,12 +18,13 @@ object UpdateChecker {
     /** APK for the running flavor (modern/legacy), so the user keeps the matching framework path. */
     val apkUrl: String get() = "$BASE/bluetooth-${BuildConfig.FLAVOR}.apk"
 
-    data class Manifest(val appVersionCode: Int, val appVersionName: String, val rulesRevision: Int)
+    data class Manifest(val appVersionCode: Int, val appVersionName: String, val changes: List<String>, val rulesRevision: Int)
 
     sealed interface Result {
         data class Ok(
             val appUpdate: Boolean,
             val latestVersionName: String,
+            val changes: List<String>,
             val rulesUpdate: Boolean,
             val latestRevision: Int
         ) : Result
@@ -46,7 +47,8 @@ object UpdateChecker {
             val root = JsonParser.parseString(text).asJsonObject
             val app = root.getAsJsonObject("app")
             val rules = root.getAsJsonObject("rules")
-            return Manifest(app.get("versionCode").asInt, app.get("versionName").asString, rules.get("revision").asInt)
+            val changes = app.getAsJsonArray("changes")?.map { it.asString } ?: emptyList()
+            return Manifest(app.get("versionCode").asInt, app.get("versionName").asString, changes, rules.get("revision").asInt)
         } finally {
             connection.disconnect()
         }
@@ -57,6 +59,7 @@ object UpdateChecker {
         Result.Ok(
             appUpdate = m.appVersionCode > BuildConfig.VERSION_CODE,
             latestVersionName = m.appVersionName,
+            changes = m.changes,
             rulesUpdate = m.rulesRevision > currentRulesRevision,
             latestRevision = m.rulesRevision
         )

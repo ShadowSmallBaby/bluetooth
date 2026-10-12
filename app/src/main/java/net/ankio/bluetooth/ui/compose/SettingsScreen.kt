@@ -79,6 +79,12 @@ fun SettingsScreen(activity: MainActivity, model: SettingsViewModel = viewModel(
                     else R.string.ble_advertiser_compatibility_desc),
                 checked = compatibility, enabled = !compatibilityRequired,
                 onCheckedChange = { if (!compatibilityRequired) SpUtils.putBoolean(Keys.BLE_ADVERTISER_COMPATIBILITY, it) })
+            val peripheralDebug = preference(Keys.BLE_PERIPHERAL_DEBUG) {
+                SpUtils.getBoolean(Keys.BLE_PERIPHERAL_DEBUG, false)
+            }
+            SwitchPreference(title = stringResource(R.string.ble_peripheral_debug),
+                summary = stringResource(R.string.ble_peripheral_debug_desc), checked = peripheralDebug,
+                onCheckedChange = { SpUtils.putBoolean(Keys.BLE_PERIPHERAL_DEBUG, it) })
         }
         SmallTitle(stringResource(R.string.hook_rules_title))
         Card {
@@ -114,6 +120,8 @@ fun SettingsScreen(activity: MainActivity, model: SettingsViewModel = viewModel(
             ArrowPreference(title = stringResource(R.string.check_update_title), enabled = !busy,
                 summary = stringResource(if (busy) R.string.update_checking else R.string.check_update_desc),
                 onClick = model::checkForUpdates)
+            ArrowPreference(title = stringResource(R.string.current_changelog),
+                onClick = { dialog = "changelog" })
             ArrowPreference(title = stringResource(R.string.project_home), summary = stringResource(R.string.source_code),
                 onClick = { CustomTabsHelper.launchUrlOrCopy(activity, "https://github.com/ShadowSmallBaby/bluetooth") })
         }
@@ -136,20 +144,44 @@ fun SettingsScreen(activity: MainActivity, model: SettingsViewModel = viewModel(
             Text(pretty)
         }
     }
+    if (dialog == "changelog") ChoiceDialog(stringResource(R.string.current_changelog), { dialog = "" }) {
+        val changes = remember {
+            activity.assets.open("version.json").bufferedReader().use {
+                JSONObject(it.readText()).getJSONArray("changes").let { entries ->
+                    List(entries.length()) { index -> entries.getString(index) }
+                }
+            }
+        }
+        Text(BuildConfig.VERSION_NAME)
+        changes.forEach { Text("• $it") }
+    }
     model.feedback?.let { feedback ->
-        ChoiceDialog(stringResource(R.string.hook_rules_title), model::dismissFeedback) {
+        ChoiceDialog(stringResource(feedback.title), model::dismissFeedback) {
             Text(stringResource(feedback.message, *feedback.arguments.toTypedArray()))
         }
     }
     model.available?.let { result ->
-        ChoiceDialog(stringResource(R.string.update_found), model::dismissUpdate) {
+        ChoiceDialog(stringResource(R.string.check_update_title), model::dismissUpdate, showClose = false) {
             if (result.appUpdate) {
                 Text(stringResource(R.string.update_app_available, result.latestVersionName))
-                TextButton(stringResource(R.string.update_download_apk), onClick = { CustomTabsHelper.launchUrlOrCopy(activity, UpdateChecker.apkUrl) })
+                result.changes.forEach { Text("• $it") }
             }
             if (result.rulesUpdate) {
+                // 版本与规则都有更新时，用分割线隔开更新日志与规则提示
+                if (result.appUpdate) HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 Text(stringResource(R.string.update_rules_available, result.latestRevision))
-                TextButton(stringResource(R.string.update_rules_now), onClick = { model.dismissUpdate(); model.update(UpdateChecker.RULES_URL) })
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                // 左键：版本与规则都有更新时为「更新规则」，其余情况为「关闭」
+                if (result.appUpdate && result.rulesUpdate)
+                    TextButton(stringResource(R.string.update_rules_now), onClick = { model.dismissUpdate(); model.update(UpdateChecker.RULES_URL) }, modifier = Modifier.weight(1f))
+                else
+                    TextButton(stringResource(R.string.close), onClick = model::dismissUpdate, modifier = Modifier.weight(1f))
+                // 右键：应用有更新时为「新版本」，仅规则有更新时为「更新规则」
+                if (result.appUpdate)
+                    TextButton(stringResource(R.string.update_new_version), onClick = { CustomTabsHelper.launchUrlOrCopy(activity, UpdateChecker.apkUrl) }, modifier = Modifier.weight(1f))
+                else if (result.rulesUpdate)
+                    TextButton(stringResource(R.string.update_rules_now), onClick = { model.dismissUpdate(); model.update(UpdateChecker.RULES_URL) }, modifier = Modifier.weight(1f))
             }
         }
     }

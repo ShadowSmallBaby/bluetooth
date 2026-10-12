@@ -26,6 +26,7 @@ object PreferenceKeys {
     const val HISTORY = "history"
     const val BLE_ADVERTISER_ENABLED = "pref_ble_advertiser_enabled"
     const val BLE_ADVERTISER_COMPATIBILITY = "pref_ble_advertiser_compatibility"
+    const val BLE_PERIPHERAL_DEBUG = "pref_ble_peripheral_debug"
 
     // App-level
     const val LANGUAGE = "setting_language"

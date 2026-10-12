@@ -48,6 +48,9 @@ object BleAdvertiserManager {
          * 验证广播数据格式
          */
         fun isValidBroadcastData(data: String, maxDataLength: Int = MAX_DATA_LENGTH): Boolean {
+            if (SpUtils.getBoolean(PreferenceKeys.BLE_PERIPHERAL_DEBUG, false)) {
+                return data.length % 2 == 0 && data.isNotEmpty() && data.all { it.digitToIntOrNull(16) != null }
+            }
             return HEX_PATTERN.matcher(data).matches() &&
                    data.length % 2 == 0 &&
                    data.length / 2 <= maxDataLength

@@ -132,6 +132,13 @@
     <string name="last_sync">Last sync: %1$s</string>
     <string name="advertising_remaining">Broadcasting · %1$d seconds remaining</string>
     <string name="delete_history">Delete from history</string>
+    <string name="delete_history_confirm">Delete this history record?</string>
+    <string name="delete">Delete</string>
+    <string name="update_new_version">New version</string>
+    <string name="ble_peripheral_debug">BLE peripheral debug mode</string>
+    <string name="ble_peripheral_debug_desc">Ignore the 31-byte advertising data limit</string>
+    <string name="current_changelog">changelog</string>
+    <string name="delete_vertical">Delete</string>
     <string name="scan_failed">Scan failed (%1$d)</string>
     <string name="history_read_error">Saved history could not be read. The original data has been preserved.</string>
 </resources>

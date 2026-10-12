@@ -14,7 +14,8 @@ import net.ankio.bluetooth.rules.*
 import net.ankio.bluetooth.update.UpdateChecker
 import net.ankio.bluetooth.utils.SpUtils
 
-data class SettingsFeedback(@StringRes val message: Int, val arguments: List<Any> = emptyList())
+data class SettingsFeedback(@StringRes val message: Int, val arguments: List<Any> = emptyList(),
+    @StringRes val title: Int = R.string.hook_rules_title)
 
 /** Activity-scoped: tab changes and recreation do not drop a running update or its result. */
 class SettingsViewModel : ViewModel() {
@@ -62,9 +63,9 @@ class SettingsViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 when (val result = withContext(Dispatchers.IO) { UpdateChecker.check(revision?.rules?.revision ?: 0) }) {
-                    is UpdateChecker.Result.Failed -> feedback = SettingsFeedback(R.string.update_failed, listOf(result.reason))
+                    is UpdateChecker.Result.Failed -> feedback = SettingsFeedback(R.string.update_failed, listOf(result.reason), R.string.check_update_title)
                     is UpdateChecker.Result.Ok -> if (result.appUpdate || result.rulesUpdate) available = result
-                        else feedback = SettingsFeedback(R.string.update_none)
+                        else feedback = SettingsFeedback(R.string.update_none, title = R.string.check_update_title)
                 }
             } finally { busy = false }
         }

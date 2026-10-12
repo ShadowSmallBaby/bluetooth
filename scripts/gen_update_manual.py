@@ -32,14 +32,17 @@ def main():
     ap.add_argument("--gradle", default="app/build.gradle")
     ap.add_argument("--rules", default="app/src/main/resources/hook_rules.json")
     ap.add_argument("--out", default="dist/update-manual.json")
+    ap.add_argument("--version", default="version.json")
     args = ap.parse_args()
 
     version_code, version_name = read_app_version(args.gradle)
     rules_schema, revision = read_rules(args.rules)
+    version = json.loads(pathlib.Path(args.version).read_text(encoding="utf-8"))
 
     manifest = {
         "schemaVersion": 1,
-        "app": {"versionCode": version_code, "versionName": version_name},
+        "app": {"versionCode": version_code, "versionName": version_name,
+                "changes": version.get("changes", [])},
         "rules": {"schemaVersion": rules_schema, "revision": revision},
     }
     out = pathlib.Path(args.out)
