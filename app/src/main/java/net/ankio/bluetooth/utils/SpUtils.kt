@@ -12,6 +12,7 @@ const val NAME = "config"
 @SuppressLint("StaticFieldLeak")
 val context = App.context
 
+@SuppressLint("WorldReadableFiles")
 val sp: SharedPreferences = context.getSharedPreferences(
     NAME,
     if (ModuleStatus.usesLegacyPreferences) Context.MODE_WORLD_READABLE else Context.MODE_PRIVATE
