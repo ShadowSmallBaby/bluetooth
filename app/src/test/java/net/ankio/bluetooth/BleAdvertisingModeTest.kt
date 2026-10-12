@@ -54,4 +54,12 @@ class BleAdvertisingModeTest {
             assertFalse(data, BroadcastConfig.isValidBroadcastData(data, 1650))
         }
     }
+
+    @Test
+    fun peripheralDebugIgnoresLengthButStillRequiresHex() {
+        assertTrue(BroadcastConfig.isValidBroadcastData("AA".repeat(64), 31, ignoreLengthLimit = true))
+        for (data in listOf("", "A", "02010", "02GG06", "02 01 06")) {
+            assertFalse(data, BroadcastConfig.isValidBroadcastData(data, 31, ignoreLengthLimit = true))
+        }
+    }
 }

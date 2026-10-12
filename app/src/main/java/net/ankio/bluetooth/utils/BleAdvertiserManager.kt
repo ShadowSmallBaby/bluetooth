@@ -46,14 +46,16 @@ object BleAdvertiserManager {
 
         /**
          * 验证广播数据格式
+         * @param ignoreLengthLimit 外围调试模式：只校验十六进制格式，不限制长度（由调用方读取开关，保持本函数纯净可单测）
          */
-        fun isValidBroadcastData(data: String, maxDataLength: Int = MAX_DATA_LENGTH): Boolean {
-            if (SpUtils.getBoolean(PreferenceKeys.BLE_PERIPHERAL_DEBUG, false)) {
-                return data.length % 2 == 0 && data.isNotEmpty() && data.all { it.digitToIntOrNull(16) != null }
-            }
+        fun isValidBroadcastData(
+            data: String,
+            maxDataLength: Int = MAX_DATA_LENGTH,
+            ignoreLengthLimit: Boolean = false
+        ): Boolean {
             return HEX_PATTERN.matcher(data).matches() &&
                    data.length % 2 == 0 &&
-                   data.length / 2 <= maxDataLength
+                   (ignoreLengthLimit || data.length / 2 <= maxDataLength)
         }
 
         /**
@@ -88,7 +90,11 @@ object BleAdvertiserManager {
                 mac.isEmpty() -> ConfigValidationResult(false, "MAC地址不能为空")
                 !BroadcastConfig.isValidMacAddress(mac) -> ConfigValidationResult(false, "MAC地址格式无效，应为: XX:XX:XX:XX:XX:XX")
                 data.isEmpty() -> ConfigValidationResult(false, "广播数据不能为空")
-                !BroadcastConfig.isValidBroadcastData(data, mode.maxDataLength) -> ConfigValidationResult(false, "广播数据格式无效，应为偶数位十六进制字符，且不超过${mode.maxDataLength}字节（${mode.maxDataLength * 2}位）")
+                !BroadcastConfig.isValidBroadcastData(
+                    data,
+                    mode.maxDataLength,
+                    ignoreLengthLimit = SpUtils.getBoolean(PreferenceKeys.BLE_PERIPHERAL_DEBUG, false)
+                ) -> ConfigValidationResult(false, "广播数据格式无效，应为偶数位十六进制字符，且不超过${mode.maxDataLength}字节（${mode.maxDataLength * 2}位）")
                 rssiStr.isEmpty() -> ConfigValidationResult(false, "信号强度不能为空")
                 !BroadcastConfig.isValidRssi(rssiStr.toIntOrNull() ?: -999) -> ConfigValidationResult(false, "信号强度应在-100到20dBm之间")
                 else -> ConfigValidationResult(true, "配置验证通过")

@@ -1,5 +1,9 @@
 pluginManagement {
     repositories {
+        // 与下方依赖仓库一致：镜像优先，规避跨境 TLS bad_record_mac。
+        maven { url "https://maven.aliyun.com/repository/google" }
+        maven { url "https://maven.aliyun.com/repository/public" }
+        maven { url "https://maven.aliyun.com/repository/gradle-plugin" }
         google()
         mavenCentral()
         gradlePluginPortal()
