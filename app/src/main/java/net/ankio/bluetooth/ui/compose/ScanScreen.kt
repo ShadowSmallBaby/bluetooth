@@ -1,9 +1,7 @@
 package net.ankio.bluetooth.ui.compose
 
-import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
-import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -49,13 +47,7 @@ fun ScanScreen(close: () -> Unit, model: ScanViewModel = viewModel()) {
     }
     fun start() {
         if (!model.supported()) { model.message = context.getString(R.string.unsupported_bluetooth); return }
-        permissions.launch(buildList {
-            add(Manifest.permission.ACCESS_COARSE_LOCATION)
-            add(Manifest.permission.ACCESS_FINE_LOCATION)
-            if (Build.VERSION.SDK_INT >= 31) {
-                add(Manifest.permission.BLUETOOTH_SCAN); add(Manifest.permission.BLUETOOTH_CONNECT)
-            }
-        }.toTypedArray())
+        permissions.launch(BluetoothPermissions.missing(context, BluetoothPermissions.Operation.SCAN))
     }
     DisposableEffect(lifecycle) {
         val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) model.stop() }
@@ -133,7 +125,7 @@ fun ScanScreen(close: () -> Unit, model: ScanViewModel = viewModel()) {
             Text(stringResource(R.string.scan_apply_message), color = MiuixTheme.colorScheme.onSurface)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 TextButton(stringResource(R.string.cancel), onClick = { pending = null }, modifier = Modifier.weight(1f))
-                TextButton(stringResource(R.string.ok), onClick = { model.select(device); pending = null; close() },
+                TextButton(stringResource(R.string.ok), onClick = { if (model.select(device)) { pending = null; close() } },
                     modifier = Modifier.weight(1f))
             }
         }
