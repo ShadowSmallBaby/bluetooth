@@ -75,23 +75,37 @@ jobs:
 
       - name: Publish to GitHub Release (on tag only)
         if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          changes = json.loads(Path('version.json').read_text(encoding='utf-8')).get('changes', [])
+          body = '''## 更新内容 / Changes
+
+          ''' + ''.join(f'- {item}\n' for item in changes) + '''
+          ## 下载哪个包？ / Which APK?
+
+          | 包 | 适用框架 |
+          |---|---|
+          | **bluetooth-modern.apk** | 现代 LibXposed，LSPosed **API ≥ 102** |
+          | **bluetooth-legacy.apk** | 经典 Xposed / 旧 LSPosed / EdXposed（含 **API < 102**） |
+
+          - 两个包**功能相同**，按框架版本**二选一**安装，不要同装。
+          - 现代包若提示「该模块需要更新的 Xposed 版本 102」，改用 **legacy** 包。
+          - 作用域勾选 **com.android.bluetooth**；**legacy 包**还需勾选**本应用自身**（用于激活检测）。
+          - `hook_rules.json` / `update-manual.json` 供 App 内「检查更新」使用，一般无需手动下载。
+          '''
+          Path('release-body.md').write_text(body, encoding='utf-8')
+          PY
+
+      - name: Publish to GitHub Release (on tag only)
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
           fail_on_unmatched_files: true
           generate_release_notes: true
-          body: |
-            ## 下载哪个包？ / Which APK?
-
-            | 包 | 适用框架 |
-            |---|---|
-            | **bluetooth-modern.apk** | 现代 LibXposed，LSPosed **API ≥ 102** |
-            | **bluetooth-legacy.apk** | 经典 Xposed / 旧 LSPosed / EdXposed（含 **API < 102**） |
-
-            - 两个包**功能相同**，按框架版本**二选一**安装，不要同装。
-            - 现代包若提示「该模块需要更新的 Xposed 版本 102」，改用 **legacy** 包。
-            - 作用域勾选 **com.android.bluetooth**；**legacy 包**还需勾选**本应用自身**（用于激活检测）。
-            - `hook_rules.json` / `update-manual.json` 供 App 内「检查更新」使用，一般无需手动下载。
+          body_path: release-body.md
 
   rules-only:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'rules-only'
