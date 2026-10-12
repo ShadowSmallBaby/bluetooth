@@ -7,9 +7,9 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import androidx.appcompat.app.AlertDialog
 import net.ankio.bluetooth.R
-import rikka.html.text.HtmlCompat
+import androidx.core.text.HtmlCompat
 
 
 /**
@@ -62,14 +62,14 @@ object CustomTabsHelper {
             } catch (tr: Throwable) {
                 try {
                     ClipboardUtils.put(context, url)
-                    MaterialAlertDialogBuilder(context)
+                    AlertDialog.Builder(context)
                         .setTitle(R.string.dialog_cannot_open_browser_title)
                         .setMessage(
                             HtmlCompat.fromHtml(
                                 context.getString(
                                     R.string.toast_copied_to_clipboard_with_text,
                                     url
-                                )
+                                ), HtmlCompat.FROM_HTML_MODE_LEGACY
                             )
                         )
                         .setPositiveButton(R.string.ok, null)

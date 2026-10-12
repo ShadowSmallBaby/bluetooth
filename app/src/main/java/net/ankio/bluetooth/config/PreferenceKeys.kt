@@ -27,8 +27,8 @@ object PreferenceKeys {
     const val BLE_ADVERTISER_ENABLED = "pref_ble_advertiser_enabled"
 
     // App-level
-    const val ANALYZE = "app_center_analyze"
     const val LANGUAGE = "setting_language"
     const val HIDE_ICON = "hide_icon"
     const val APP_VERSION = "app_version"
+    const val FLOATING_TABS = "pref_floating_tabs"
 }

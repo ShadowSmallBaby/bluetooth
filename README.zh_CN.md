@@ -13,6 +13,7 @@
   - `modern` —— LibXposed API **102+**（较新 LSPosed）
   - `legacy` —— 经典 Xposed / 旧版 LSPosed / EdXposed（API **< 102**）
 - BLE 外围广播、WebDAV 同步、应用内检查更新（APK + hook 规则）。
+- Compose + miuix 界面，底部包含 WebDAV、主页、设置三个标签页，不含匿名分析 SDK。
 
 ## 安装
 
@@ -21,7 +22,7 @@
      改用 `bluetooth-legacy.apk`。两者功能相同，**二选一**安装。
 2. 在 LSPosed 启用模块。作用域勾选 **com.android.bluetooth**；**legacy 包**还需勾选
    **本应用自身**（用于激活检测），modern 包不需要。
-3. 打开应用，选择要模拟的设备（或手动填 MAC / 广播数据），开启模拟。
+3. 打开主页，点击悬浮扫描按钮，选择设备或历史记录，然后开启模拟。
 4. 关开一次蓝牙让 Hook 载入，再用任意扫描器查看。
 
 ### WebDAV 同步
@@ -32,6 +33,8 @@
 ## 构建
 
 需要 JDK 17。
+
+Release 构建开启 R8 和资源压缩，两种 flavor 均保留 Android 7.0（API 24）支持。
 
 ```bash
 ./gradlew assembleModernRelease assembleLegacyRelease

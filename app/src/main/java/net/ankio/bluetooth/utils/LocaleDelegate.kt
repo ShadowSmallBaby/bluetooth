@@ -2,7 +2,6 @@ package net.ankio.bluetooth.utils
 
 import android.app.Activity
 import android.content.res.Configuration
-import net.ankio.bluetooth.ui.BaseActivity
 
 import java.util.Locale
 import androidx.core.text.layoutDirection
@@ -53,6 +52,6 @@ class LocaleDelegate {
         @JvmStatic
         var systemLocale: Locale? = Locale.getDefault()
 
-        var changedList = HashMap<Class<BaseActivity>,Boolean>()
+        var changedList = HashMap<Class<out Activity>,Boolean>()
     }
 }

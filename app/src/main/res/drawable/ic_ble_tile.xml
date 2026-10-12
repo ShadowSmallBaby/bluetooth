@@ -4,7 +4,7 @@
     android:height="24dp"
     android:viewportWidth="1024"
     android:viewportHeight="1024"
-    android:tint="?attr/colorOnSurface">
+    android:tint="#FF000000">
 
     <!-- 蓝牙背景圆形 -->
     <path

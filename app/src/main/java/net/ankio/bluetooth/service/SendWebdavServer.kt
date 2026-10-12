@@ -40,6 +40,8 @@ class SendWebdavServer : Service() {
     private var deviceCompany = SpUtils.getString(PreferenceKeys.WEBDAV_COMPANY, "") // 指定的蓝牙设备公司
     private val scanInterval: Long = 10 * 60 * 1000 // 10 minutes
 
+    // Parses assets/company_ids.json once instead of on every scan result.
+    private val companyParser by lazy { BluetoothData(this) }
     private lateinit var bluetoothAdapter: BluetoothAdapter
     private lateinit var scanCallback: ScanCallback
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -67,7 +69,7 @@ class SendWebdavServer : Service() {
        scanCallback = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 val scanRecord = result.scanRecord?.bytes ?: return
-                val companyName = BluetoothData(this@SendWebdavServer).parseManufacturerData(scanRecord)?:""
+                val companyName = companyParser.parseManufacturerData(scanRecord)?:""
                 if(result.device.address == deviceAddress|| companyName.contains(deviceCompany)){
                     stopScan()
                     Log.i(TAG, "Found device: ${result.device.address}")

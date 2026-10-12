@@ -15,6 +15,7 @@ so any scanner app sees the device you configured.
   - `modern` — LibXposed API **102+** (newer LSPosed)
   - `legacy` — classic Xposed / older LSPosed / EdXposed (API **< 102**)
 - BLE peripheral advertising, WebDAV sync, and in-app update check (APK + hook rules).
+- Compose + miuix interface with WebDAV, Home, and Settings tabs; no analytics SDK.
 
 ## Install
 
@@ -23,7 +24,7 @@ so any scanner app sees the device you configured.
      102"*, use `bluetooth-legacy.apk` instead. The two are functionally identical — install only one.
 2. Enable the module in LSPosed. Scope: check **com.android.bluetooth**; the **legacy** build
    additionally needs **this app itself** (for activation detection). The modern build does not.
-3. Open the app, pick a device to emulate (or enter MAC / advertisement data), enable simulation.
+3. Open Home, use the floating scan button to select a device (or a saved history entry), then enable simulation.
 4. Toggle Bluetooth off/on so the hook reloads, then scan from any app.
 
 ### WebDAV sync
@@ -34,6 +35,8 @@ so any scanner app sees the device you configured.
 ## Build
 
 Requires JDK 17.
+
+Release builds enable R8 and resource shrinking. Both flavors retain Android 7.0 (API 24) support.
 
 ```bash
 ./gradlew assembleModernRelease assembleLegacyRelease

@@ -17,6 +17,8 @@ class RuleRepository(private val bundled: String, private val store: RuleStore) 
 
     fun current(): SelectedRules = candidates(store.active, store.previous, bundled).first()
 
+    fun hasPrevious(): Boolean = !store.previous.isNullOrBlank()
+
     fun install(json: String): SelectedRules {
         val incoming = HookRules.parse(json)
         val current = current()

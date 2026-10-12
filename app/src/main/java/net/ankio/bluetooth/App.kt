@@ -5,8 +5,6 @@ import android.annotation.SuppressLint
 import android.app.Application
 import android.content.Context
 import android.text.TextUtils
-import com.flurry.android.FlurryAgent
-import com.quickersilver.themeengine.ThemeEngine
 import net.ankio.bluetooth.utils.LocaleDelegate
 import net.ankio.bluetooth.utils.SpUtils
 import java.util.*
@@ -35,16 +33,9 @@ open class App : Application() {
         context = applicationContext
         // Flavor-specific: modern binds the LibXposed service, legacy is a no-op.
         ActivationSupport.install(this)
-        ThemeEngine.applyToActivities(this)
         //设置语言
         LocaleDelegate.defaultLocale = getLocale()
 
-        //匿名统计
-        if (SpUtils.getBoolean(PreferenceKeys.ANALYZE, true)) {
-            FlurryAgent.Builder()
-                .withLogEnabled(true)
-                .build(this, "JS6H7TJJDMQRDDMWG55C")
-        }
 
     }
 

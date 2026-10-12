@@ -47,7 +47,7 @@ class BleAdvertiserTileService : TileService() {
     private fun updateTile() {
         val tile = qsTile ?: return
         tile.state = if (isAdvertising) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-        tile.label = getString(R.string.ble_advertiser_title)
+        tile.label = getString(R.string.ble_tile_label)
         tile.icon = android.graphics.drawable.Icon.createWithResource(
             this,
             R.drawable.ic_ble_tile

@@ -36,7 +36,7 @@ class RuleUpdater(private val repository: RuleRepository) {
         val selected = repository.rollback()
         Result.Updated(selected.rules.revision, selected.source)
     } catch (error: Exception) {
-        Result.Failed(error.message ?: "无法回退规则")
+        Result.Failed(error.message ?: error.javaClass.simpleName)
     }
 
     companion object {
