@@ -1,5 +1,8 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id 'com.android.application'
+    id 'org.jetbrains.kotlin.plugin.compose'
 }
 
 android {
@@ -38,7 +41,8 @@ android {
     }
     buildTypes {
         release {
-            minifyEnabled false
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig System.getenv('BT_KEYSTORE_PATH') ? signingConfigs.release : signingConfigs.debug
         }
@@ -56,7 +60,8 @@ android {
     }
     buildFeatures {
         buildConfig = true
-        viewBinding = true
+        viewBinding = false
+        compose = true
     }
     lint {
         // Release APKs here are debug-signed and shipped as CI artifacts; skip the vital lint
@@ -84,38 +89,29 @@ android {
 
 kotlin {
     compilerOptions {
-        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+        jvmTarget = JvmTarget.JVM_17
     }
 }
 
 dependencies {
     implementation 'androidx.core:core-ktx:1.10.1'
     implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'com.google.android.material:material:1.9.0'
-    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-    implementation 'androidx.preference:preference-ktx:1.2.0'
     implementation 'androidx.browser:browser:1.5.0'
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
-    //主题库
-    implementation 'io.github.prathameshmm02.themeEngine:themeEngine:1.1.0'
-    //状态栏
-    implementation 'com.gitee.zackratos:UltimateBarX:dev-SNAPSHOT'
-    //Html转换
-    implementation 'dev.rikka.rikkax.html:html-ktx:1.1.2'
+    androidTestImplementation 'androidx.test.espr' +
+            'esso:espresso-core:3.5.1'
     //webdav
-    implementation 'com.github.thegrizzlylabs:sardine-android:0.8'
-    //匿名统计
-    implementation 'com.flurry.android:analytics:14.2.0@aar'
+    implementation('com.github.thegrizzlylabs:sardine-android:0.8') {
+        // Android provides XmlPullParser; bundling a second copy breaks R8.
+        exclude group: 'xpp3', module: 'xpp3'
+        exclude group: 'xmlpull', module: 'xmlpull'
+        exclude group: 'stax', module: 'stax-api'
+    }
     //gson
     implementation 'com.google.code.gson:gson:2.10.1'
     //异步操作
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4'
-    //权限请求 支持Androidx
-    implementation 'com.guolindev.permissionx:permissionx:1.7.1'
-    //让你的适配器一目了然，告别代码冗余
-    implementation 'com.github.CymChad:BaseRecyclerViewAdapterHelper:3.0.4'
     //Xposed组件库
     // The module still uses the legacy callback API so it remains compatible
     // with LSPosed legacy mode and older EdXposed installations.
@@ -124,4 +120,20 @@ dependencies {
     compileOnly 'io.github.libxposed:api:102.0.0'
     // Modern LibXposed service (modern flavor only): activation + remote-preference bridge.
     modernImplementation 'io.github.libxposed:service:102.0.0'
+
+    // Jetpack Compose（BOM 统一版本）
+    def composeBom = platform('androidx.compose:compose-bom:2026.05.01')
+    implementation composeBom
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.foundation:foundation'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+    // miuix popups/dialogs read LocalNavigationEventDispatcherOwner, provided from activity-compose 1.12+.
+    implementation 'androidx.activity:activity-compose:1.13.0'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4'
+    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.9.4'
+    // miuix（HyperOS 风格 Compose UI）
+    implementation 'top.yukonga.miuix.kmp:miuix-ui-android:0.9.4'
+    implementation 'top.yukonga.miuix.kmp:miuix-preference-android:0.9.4'
+    implementation 'top.yukonga.miuix.kmp:miuix-icons-android:0.9.4'
 }
