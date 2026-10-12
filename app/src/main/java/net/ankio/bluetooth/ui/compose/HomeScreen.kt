@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -25,7 +26,8 @@ fun HomeScreen(model: HomeViewModel) {
     val enabled = preference(Keys.ENABLED) { SpUtils.getBoolean(Keys.ENABLED) }
     val webdav = preference(Keys.WEBDAV_ENABLED) { SpUtils.getBoolean(Keys.WEBDAV_ENABLED) }
     val sender = preference(Keys.WEBDAV_SENDER) { SpUtils.getBoolean(Keys.WEBDAV_SENDER) }
-    val advertising = preference(Keys.BLE_ADVERTISER_ENABLED) { SpUtils.getBoolean(Keys.BLE_ADVERTISER_ENABLED) }
+    val advertisingState by model.advertising.collectAsStateWithLifecycle()
+    val advertising = advertisingState.active
     val bluetooth = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         if (it.resultCode == android.app.Activity.RESULT_OK) model.startAdvertising()
         else model.message = context.getString(R.string.not_open_bluetooth)
@@ -76,10 +78,7 @@ fun HomeScreen(model: HomeViewModel) {
                 onCheckedChange = {
                     if (!it) model.stopAdvertising()
                     else {
-                        val missing = BleAdvertiserManager.getMissingPermissions(context).let { required ->
-                            if (android.Manifest.permission.ACCESS_FINE_LOCATION in required)
-                                required + android.Manifest.permission.ACCESS_COARSE_LOCATION else required
-                        }
+                        val missing = BleAdvertiserManager.getMissingPermissions(context)
                         if (missing.isEmpty()) start() else permissions.launch(missing)
                     }
                 })

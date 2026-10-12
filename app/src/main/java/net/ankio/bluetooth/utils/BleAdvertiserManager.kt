@@ -1,7 +1,6 @@
 package net.ankio.bluetooth.utils
 import net.ankio.bluetooth.config.PreferenceKeys
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
@@ -15,6 +14,9 @@ import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 import java.util.regex.Pattern
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import net.ankio.bluetooth.service.AdvertisingState
 
 /**
  * BLE广播器管理器
@@ -30,7 +32,7 @@ object BleAdvertiserManager {
     object BroadcastConfig {
         const val DEFAULT_DATA = "02011A17FF0002317D89030000000F0295699D011000000003FE3C"
         const val DEFAULT_RSSI = -50
-        const val MAX_DATA_LENGTH = 31
+        const val MAX_DATA_LENGTH = BleAdvertisingMode.LEGACY_MAX_DATA_LENGTH
 
         private val MAC_PATTERN = Pattern.compile("^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$")
         private val HEX_PATTERN = Pattern.compile("^[0-9A-Fa-f]+$")
@@ -45,10 +47,10 @@ object BleAdvertiserManager {
         /**
          * 验证广播数据格式
          */
-        fun isValidBroadcastData(data: String): Boolean {
+        fun isValidBroadcastData(data: String, maxDataLength: Int = MAX_DATA_LENGTH): Boolean {
             return HEX_PATTERN.matcher(data).matches() &&
                    data.length % 2 == 0 &&
-                   data.length / 2 <= MAX_DATA_LENGTH
+                   data.length / 2 <= maxDataLength
         }
 
         /**
@@ -61,16 +63,20 @@ object BleAdvertiserManager {
 
     object ServiceState {
 
-        fun setEnabled(context: Context, enabled: Boolean) {
-            Log.d(TAG, "设置服务状态: enabled=$enabled")
+        private val current = MutableStateFlow(AdvertisingState())
+        val state = current.asStateFlow()
+
+        fun setEnabled(context: Context, enabled: Boolean, deadlineElapsed: Long = 0) {
+            current.value = AdvertisingState(enabled, if (enabled) deadlineElapsed else 0)
             SpUtils.putBoolean(PreferenceKeys.BLE_ADVERTISER_ENABLED, enabled)
         }
 
-        fun isEnabled(context: Context): Boolean {
-            return SpUtils.getBoolean(PreferenceKeys.BLE_ADVERTISER_ENABLED, false)
-        }
+        fun isEnabled(context: Context): Boolean = state.value.active
 
-        fun validateConfiguration(context: Context): ConfigValidationResult {
+        fun validateConfiguration(
+            context: Context,
+            mode: BleAdvertisingMode = advertisingMode()
+        ): ConfigValidationResult {
             val mac = SpUtils.getString(PreferenceKeys.MAC, "").trim()
             val data = SpUtils.getString(PreferenceKeys.DATA, "").trim()
             val rssiStr = SpUtils.getString(PreferenceKeys.RSSI, BroadcastConfig.DEFAULT_RSSI.toString()).trim()
@@ -79,7 +85,7 @@ object BleAdvertiserManager {
                 mac.isEmpty() -> ConfigValidationResult(false, "MAC地址不能为空")
                 !BroadcastConfig.isValidMacAddress(mac) -> ConfigValidationResult(false, "MAC地址格式无效，应为: XX:XX:XX:XX:XX:XX")
                 data.isEmpty() -> ConfigValidationResult(false, "广播数据不能为空")
-                !BroadcastConfig.isValidBroadcastData(data) -> ConfigValidationResult(false, "广播数据格式无效，应为偶数位十六进制字符，且不超过${BroadcastConfig.MAX_DATA_LENGTH * 2}位")
+                !BroadcastConfig.isValidBroadcastData(data, mode.maxDataLength) -> ConfigValidationResult(false, "广播数据格式无效，应为偶数位十六进制字符，且不超过${mode.maxDataLength}字节（${mode.maxDataLength * 2}位）")
                 rssiStr.isEmpty() -> ConfigValidationResult(false, "信号强度不能为空")
                 !BroadcastConfig.isValidRssi(rssiStr.toIntOrNull() ?: -999) -> ConfigValidationResult(false, "信号强度应在-100到20dBm之间")
                 else -> ConfigValidationResult(true, "配置验证通过")
@@ -91,6 +97,13 @@ object BleAdvertiserManager {
         val isValid: Boolean,
         val message: String
     )
+
+    fun isCompatibilityModeEnabled(): Boolean =
+        BleAdvertisingMode.isCompatibilityRequired(Build.VERSION.SDK_INT) ||
+            SpUtils.getBoolean(PreferenceKeys.BLE_ADVERTISER_COMPATIBILITY, false)
+
+    fun advertisingMode(): BleAdvertisingMode =
+        BleAdvertisingMode.resolve(Build.VERSION.SDK_INT, isCompatibilityModeEnabled())
 
     /**
      * 检查设备是否支持BLE广播
@@ -133,41 +146,11 @@ object BleAdvertiserManager {
     /**
      * 检查是否有必要权限
      */
-    fun hasRequiredPermissions(context: Context): Boolean {
-        val requiredPermissions = getRequiredPermissions()
-        return requiredPermissions.all { permission ->
-            ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
-        }
-    }
+    fun hasRequiredPermissions(context: Context): Boolean =
+        BluetoothPermissions.granted(context, BluetoothPermissions.Operation.ADVERTISE)
 
-    /**
-     * 获取缺失的权限
-     */
-    fun getMissingPermissions(context: Context): Array<String> {
-        val requiredPermissions = getRequiredPermissions()
-        return requiredPermissions.filter { permission ->
-            ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED
-        }.toTypedArray()
-    }
-
-    /**
-     * 获取所需权限列表
-     */
-    private fun getRequiredPermissions(): Array<String> {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            arrayOf(
-                Manifest.permission.BLUETOOTH_ADVERTISE,
-                Manifest.permission.BLUETOOTH_CONNECT,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            )
-        } else {
-            arrayOf(
-                Manifest.permission.BLUETOOTH,
-                Manifest.permission.BLUETOOTH_ADMIN,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            )
-        }
-    }
+    fun getMissingPermissions(context: Context): Array<String> =
+        BluetoothPermissions.missing(context, BluetoothPermissions.Operation.ADVERTISE)
 
     /**
      * 检查蓝牙是否开启
@@ -201,6 +184,7 @@ object BleAdvertiserManager {
      */
     fun startAdvertising(context: Context) {
         try {
+            check(hasRequiredPermissions(context)) { context.getString(net.ankio.bluetooth.R.string.no_permission) }
             val compatibility = checkCompatibility(context)
             if (!compatibility.isCompatible) {
                 Log.e(TAG, "设备不兼容: ${compatibility.message}")
@@ -236,10 +220,7 @@ object BleAdvertiserManager {
      */
     fun stopAdvertising(context: Context) {
         try {
-            val intent = Intent(context, net.ankio.bluetooth.service.BleAdvertiserService::class.java).apply {
-                action = net.ankio.bluetooth.service.BleAdvertiserService.ACTION_STOP_ADVERTISING
-            }
-            context.startService(intent)
+            context.stopService(Intent(context, net.ankio.bluetooth.service.BleAdvertiserService::class.java))
 
             Log.i(TAG, "BLE广播停止请求已发送")
 

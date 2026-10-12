@@ -20,7 +20,8 @@ class BleAdvertiserTileService : TileService() {
 
         when (tile.state) {
             Tile.STATE_INACTIVE -> {
-                BleAdvertiserManager.startAdvertising(this)
+                runCatching { BleAdvertiserManager.startAdvertising(this) }
+                    .onFailure { android.widget.Toast.makeText(this, it.message, android.widget.Toast.LENGTH_LONG).show() }
             }
 
             Tile.STATE_ACTIVE -> {

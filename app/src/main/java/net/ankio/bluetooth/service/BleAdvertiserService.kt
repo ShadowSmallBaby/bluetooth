@@ -1,351 +1,174 @@
 package net.ankio.bluetooth.service
-import net.ankio.bluetooth.config.PreferenceKeys
 
-import android.Manifest
 import android.annotation.SuppressLint
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
-import android.bluetooth.le.AdvertiseCallback
-import android.bluetooth.le.AdvertiseData
-import android.bluetooth.le.AdvertiseSettings
-import android.bluetooth.le.BluetoothLeAdvertiser
+import android.bluetooth.le.*
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
+import android.content.IntentFilter
 import android.os.Build
 import android.os.IBinder
 import android.os.ParcelUuid
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import java.util.UUID
+import kotlinx.coroutines.*
 import net.ankio.bluetooth.R
+import net.ankio.bluetooth.config.PreferenceKeys
 import net.ankio.bluetooth.ui.MainActivity
 import net.ankio.bluetooth.utils.BleAdvertiserManager
+import net.ankio.bluetooth.utils.BluetoothPermissions
 import net.ankio.bluetooth.utils.ByteUtils
 import net.ankio.bluetooth.utils.SpUtils
-import kotlin.time.Duration.Companion.milliseconds
+import java.util.UUID
 
-/**
- * BLE外围设备广播服务
- */
+/** Owns advertising, its timeout, and cleanup regardless of the app screen or launch source. */
 class BleAdvertiserService : Service() {
-
     companion object {
         private const val TAG = "BleAdvertiserService"
         private const val NOTIFICATION_ID = 2001
         private const val CHANNEL_ID = "ble_advertiser_channel"
-        private const val CHANNEL_NAME = "BLE广播服务"
-
-        // 动作常量
+        private const val DURATION_MS = 6 * 60 * 1000L
         const val ACTION_START_ADVERTISING = "net.ankio.bluetooth.START_ADVERTISING"
         const val ACTION_STOP_ADVERTISING = "net.ankio.bluetooth.STOP_ADVERTISING"
         const val ACTION_UPDATE_CONFIG = "net.ankio.bluetooth.UPDATE_CONFIG"
     }
 
-    /**
-     * 广播事件类型
-     */
     enum class AdvertisingEvent {
-        STARTED,
-        STOPPED,
-        FAILED,
-        BLUETOOTH_DISABLED,
-        DEVICE_NOT_SUPPORTED,
-        PERMISSION_DENIED,
-        EXCEPTION
+        STARTED, STOPPED, FAILED, BLUETOOTH_DISABLED, DEVICE_NOT_SUPPORTED, PERMISSION_DENIED, EXCEPTION
     }
 
-    private var bluetoothManager: BluetoothManager? = null
-    private var bluetoothAdapter: BluetoothAdapter? = null
-    private var bluetoothLeAdvertiser: BluetoothLeAdvertiser? = null
-    private var advertiseCallback: AdvertiseCallback? = null
-    private var isAdvertising = false
-    private var advertisingJob: Job? = null
-
-    private val serviceScope = CoroutineScope(Dispatchers.Main)
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var timeout: Job? = null
+    private var advertisingSession: AdvertisingSession? = null
+    private val bluetoothState = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == BluetoothAdapter.ACTION_STATE_CHANGED &&
+                intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1) == BluetoothAdapter.STATE_OFF) {
+                finish(AdvertisingEvent.BLUETOOTH_DISABLED)
+            }
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
-        initBluetooth()
-        createNotificationChannel()
+        if (Build.VERSION.SDK_INT >= 26) {
+            getSystemService(NotificationManager::class.java).createNotificationChannel(
+                NotificationChannel(CHANNEL_ID, getString(R.string.ble_advertiser_title), NotificationManager.IMPORTANCE_LOW))
+        }
+        ContextCompat.registerReceiver(this, bluetoothState,
+            IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED), ContextCompat.RECEIVER_EXPORTED)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_START_ADVERTISING -> startAdvertising()
-            ACTION_STOP_ADVERTISING -> stopAdvertising()
-            ACTION_UPDATE_CONFIG -> updateAdvertisingConfig()
+            ACTION_START_ADVERTISING, ACTION_UPDATE_CONFIG -> try {
+                val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                startForeground(NOTIFICATION_ID, NotificationCompat.Builder(this, CHANNEL_ID)
+                    .setContentTitle(getString(R.string.ble_advertiser_title))
+                    .setContentText(getString(R.string.ble_advertiser_active))
+                    .setSmallIcon(R.drawable.ic_bluetooth).setContentIntent(open).setOngoing(true).setSilent(true).build())
+                if (intent.action == ACTION_UPDATE_CONFIG) releaseAdvertising()
+                startAdvertising()
+            } catch (error: Exception) { finish(AdvertisingEvent.EXCEPTION, error.message) }
+            else -> finish(AdvertisingEvent.STOPPED)
         }
-        return START_STICKY
+        // A killed process cannot recover its in-memory Bluetooth session or deadline.
+        return START_NOT_STICKY
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startAdvertising() {
+        if (advertisingSession != null) return // Includes a pending start.
+        if (!BluetoothPermissions.granted(this, BluetoothPermissions.Operation.ADVERTISE)) {
+            finish(AdvertisingEvent.PERMISSION_DENIED, getString(R.string.no_permission)); return
+        }
+        val adapter = getSystemService(BluetoothManager::class.java)?.adapter
+        if (adapter?.isEnabled != true) {
+            finish(AdvertisingEvent.BLUETOOTH_DISABLED, getString(R.string.not_open_bluetooth)); return
+        }
+        val activeAdvertiser = adapter.bluetoothLeAdvertiser
+        if (activeAdvertiser == null) {
+            finish(AdvertisingEvent.DEVICE_NOT_SUPPORTED, getString(R.string.unsupported_bluetooth)); return
+        }
+        val mode = BleAdvertiserManager.advertisingMode()
+        val validation = BleAdvertiserManager.ServiceState.validateConfiguration(this, mode)
+        if (!validation.isValid) { finish(AdvertisingEvent.FAILED, validation.message); return }
+        val bytes = ByteUtils.hexStringToBytes(SpUtils.getString(PreferenceKeys.DATA).trim())
+        val data = createAdvertiseData(bytes)
+        Log.d(TAG, "Advertising mode: $mode")
+        lateinit var session: AdvertisingSession
+        val listener = object : AdvertisingSession.Listener {
+            override fun started() {
+                if (advertisingSession !== session) return
+                val deadline = SystemClock.elapsedRealtime() + DURATION_MS
+                BleAdvertiserManager.ServiceState.setEnabled(this@BleAdvertiserService, true, deadline)
+                timeout?.cancel()
+                timeout = serviceScope.launch { delay(DURATION_MS); finish(AdvertisingEvent.STOPPED) }
+                notifyManager(AdvertisingEvent.STARTED)
+            }
+            override fun failed(errorCode: Int) {
+                if (advertisingSession === session) finish(AdvertisingEvent.FAILED, getAdvertiseErrorMessage(errorCode))
+            }
+            override fun stopped() {
+                if (advertisingSession === session) finish(AdvertisingEvent.STOPPED)
+            }
+        }
+        session = if (!mode.useLegacyApi && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            SetAdvertisingSession(activeAdvertiser, data, listener)
+        } else {
+            LegacyAdvertisingSession(activeAdvertiser, data, listener)
+        }
+        advertisingSession = session
+        session.start()
+    }
+
+    /** Stop a radio session without stopping the service, also used for configuration changes. */
+    @SuppressLint("MissingPermission")
+    private fun releaseAdvertising() {
+        timeout?.cancel()
+        timeout = null
+        val session = advertisingSession
+        advertisingSession = null // Late callbacks cannot reactivate this session.
+        runCatching { session?.stop() }
+            .onFailure { Log.w(TAG, "Could not stop advertising", it) }
+        BleAdvertiserManager.ServiceState.setEnabled(this, false)
+    }
+
+    private fun finish(event: AdvertisingEvent, message: String? = null) {
+        releaseAdvertising()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        notifyManager(event, message)
+        stopSelf()
+    }
+
+    override fun onDestroy() {
+        val wasActive = advertisingSession != null
+        releaseAdvertising()
+        serviceScope.cancel()
+        unregisterReceiver(bluetoothState)
+        if (wasActive) notifyManager(AdvertisingEvent.STOPPED)
+        super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    override fun onDestroy() {
-        super.onDestroy()
-        stopAdvertising()
-    }
-
-    /**
-     * 初始化蓝牙适配器
-     */
-    private fun initBluetooth() {
-        bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
-        bluetoothAdapter = bluetoothManager?.adapter
-        bluetoothLeAdvertiser = bluetoothAdapter?.bluetoothLeAdvertiser
-    }
-
-    /**
-     * 创建通知渠道
-     */
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "BLE外围设备广播服务通知"
-                setShowBadge(false)
-                setSound(null, null)
-                enableVibration(false)
-            }
-
-            val notificationManager = getSystemService(NotificationManager::class.java)
-            notificationManager.createNotificationChannel(channel)
-        }
-    }
-
-    /**
-     * 创建前台服务通知
-     */
-    private fun createNotification(): Notification {
-        val intent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        }
-
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0, intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("BLE广播服务")
-            .setContentText("正在广播模拟蓝牙设备数据")
-            .setSmallIcon(R.drawable.ic_bluetooth)
-            .setContentIntent(pendingIntent)
-            .setOngoing(false) // 不设为常驻通知
-            .setSilent(true)
-            .setAutoCancel(true) // 点击后自动取消
-            .build()
-    }
-
-    /**
-     * 开始BLE广播
-     */
-    @SuppressLint("MissingPermission")
-    private fun startAdvertising() {
-        if (isAdvertising) {
-            Log.w(TAG, "广播已在运行中")
-            return
-        }
-
-        if (bluetoothAdapter?.isEnabled != true) {
-            Log.e(TAG, "蓝牙未开启")
-            notifyManager(AdvertisingEvent.BLUETOOTH_DISABLED)
-            return
-        }
-
-        if (bluetoothLeAdvertiser == null) {
-            Log.e(TAG, "设备不支持BLE广播")
-            notifyManager(AdvertisingEvent.DEVICE_NOT_SUPPORTED)
-            return
-        }
-
-        if (!hasRequiredPermissions()) {
-            Log.e(TAG, "缺少必要权限")
-            notifyManager(AdvertisingEvent.PERMISSION_DENIED)
-            return
-        }
-
-        try {
-            Log.i(TAG, "启动BLE广播...")
-            startForeground(NOTIFICATION_ID, createNotification())
-
-            // 获取配置数据
-            val broadcastDataHex = SpUtils.getString(PreferenceKeys.DATA, BleAdvertiserManager.BroadcastConfig.DEFAULT_DATA)
-            val dataBytes = ByteUtils.hexStringToBytes(broadcastDataHex)
-
-            if (dataBytes.isEmpty()) {
-                Log.e(TAG, "广播数据格式错误")
-                notifyManager(AdvertisingEvent.FAILED, "广播数据格式错误")
-                return
-            }
-
-            val settings = createAdvertiseSettings()
-            val advertiseData = createAdvertiseData(dataBytes)
-            val scanResponseData = createScanResponseData()
-
-            Log.d(TAG, "广播数据: $broadcastDataHex")
-
-            advertiseCallback = object : AdvertiseCallback() {
-                override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
-                    Log.i(TAG, "BLE广播启动成功")
-                    isAdvertising = true
-                    // 设置服务状态为启用
-                    BleAdvertiserManager.ServiceState.setEnabled(this@BleAdvertiserService, true)
-                    updateNotificationContent("BLE广播运行中")
-                    startPeriodicAdvertising()
-                    notifyManager(AdvertisingEvent.STARTED)
-                }
-
-                override fun onStartFailure(errorCode: Int) {
-                    val errorMsg = getAdvertiseErrorMessage(errorCode)
-                    Log.e(TAG, "BLE广播启动失败: $errorMsg")
-                    // 设置服务状态为禁用
-                    BleAdvertiserManager.ServiceState.setEnabled(this@BleAdvertiserService, false)
-                    cleanupAdvertising()
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
-                    notifyManager(AdvertisingEvent.FAILED, errorMsg)
-                }
-            }
-
-            bluetoothLeAdvertiser?.startAdvertising(settings, advertiseData, scanResponseData, advertiseCallback)
-
-        } catch (e: Exception) {
-            Log.e(TAG, "启动广播异常", e)
-            cleanupAdvertising()
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-            notifyManager(AdvertisingEvent.EXCEPTION, e.message)
-        }
-    }
-
-    /**
-     * 创建广播设置
-     */
-    private fun createAdvertiseSettings(): AdvertiseSettings {
-        return AdvertiseSettings.Builder()
-            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
-            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
-            .setConnectable(true)
-            .setTimeout(0)
-            .build()
-    }
-
-    
-    /**
-     * 停止BLE广播
-     */
-    @SuppressLint("MissingPermission")
-    private fun stopAdvertising() {
-        try {
-            Log.i(TAG, "停止BLE广播...")
-
-            advertiseCallback?.let { callback ->
-                if (hasPermission(Manifest.permission.BLUETOOTH_ADVERTISE)) {
-                    bluetoothLeAdvertiser?.stopAdvertising(callback)
-                    Log.d(TAG, "已发送停止广播指令")
-                } else {
-                    Log.w(TAG, "缺少BLUETOOTH_ADVERTISE权限")
-                }
-            }
-
-            cleanupAdvertising()
-            // 设置服务状态为禁用
-            BleAdvertiserManager.ServiceState.setEnabled(this, false)
-            updateNotificationContent("BLE广播已停止")
-            notifyManager(AdvertisingEvent.STOPPED)
-
-        } catch (e: Exception) {
-            Log.e(TAG, "停止广播异常", e)
-        } finally {
-            // 取消通知
-            cancelNotification()
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-        }
-    }
-
-    /**
-     * 通知Manager事件
-     */
     private fun notifyManager(event: AdvertisingEvent, message: String? = null) {
-        // 发送广播通知Manager
-        val intent = Intent("net.ankio.bluetooth.ADVERTISING_EVENT").apply {
+        sendBroadcast(Intent("net.ankio.bluetooth.ADVERTISING_EVENT").apply {
             setPackage(packageName)
             putExtra("event", event.name)
-            message?.let { putExtra("message", it) }
-        }
-        sendBroadcast(intent)
+            putExtra("message", message)
+        })
     }
 
-    /**
-     * 取消通知
-     */
-    private fun cancelNotification() {
-        try {
-            val notificationManager = getSystemService(NotificationManager::class.java)
-            notificationManager.cancel(NOTIFICATION_ID)
-            Log.d(TAG, "已取消BLE广播通知")
-        } catch (e: Exception) {
-            Log.e(TAG, "取消通知失败", e)
-        }
-    }
-
-    /**
-     * 更新通知内容
-     */
-    private fun updateNotificationContent(content: String) {
-        try {
-            val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("BLE广播服务")
-                .setContentText(content)
-                .setSmallIcon(R.drawable.ic_bluetooth)
-                .setOngoing(false) // 不设为常驻通知
-                .setSilent(true)
-                .setAutoCancel(true) // 点击后自动取消
-                .build()
-
-            val notificationManager = getSystemService(NotificationManager::class.java)
-            notificationManager.notify(NOTIFICATION_ID, notification)
-
-        } catch (e: Exception) {
-            Log.e(TAG, "更新通知失败", e)
-        }
-    }
-
-    
-    /**
-     * 更新广播配置
-     */
-    private fun updateAdvertisingConfig() {
-        if (isAdvertising) {
-            stopAdvertising()
-            advertisingJob = serviceScope.launch {
-                delay(1000.milliseconds)
-                startAdvertising()
-            }
-        }
-    }
-
-    /**
-     * 创建广播数据包
-     */
     private fun createAdvertiseData(data: ByteArray): AdvertiseData {
         val builder = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
@@ -423,77 +246,6 @@ class BleAdvertiserService : Service() {
         }
     }
 
-    /**
-     * 创建扫描响应数据
-     */
-    private fun createScanResponseData(): AdvertiseData {
-        return AdvertiseData.Builder()
-            .setIncludeDeviceName(false)
-            .setIncludeTxPowerLevel(false)
-            .build()
-    }
-
-    /**
-     * 开始周期性广播
-     */
-    private fun startPeriodicAdvertising() {
-        advertisingJob = serviceScope.launch {
-            while (isActive && isAdvertising) {
-                try {
-                    delay(1000.milliseconds)
-                } catch (e: Exception) {
-                    if (e is CancellationException) {
-                        ensureActive()
-                    }
-                    Log.e(TAG, "周期性广播更新异常：${e.message}")
-                }
-            }
-        }
-    }
-
-    /**
-     * 检查权限
-     */
-    private fun hasPermission(permission: String): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
-        } else {
-            ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
-        }
-    }
-
-    /**
-     * 检查是否有必要权限
-     */
-    private fun hasRequiredPermissions(): Boolean {
-        val requiredPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            arrayOf(
-                Manifest.permission.BLUETOOTH_ADVERTISE,
-                Manifest.permission.BLUETOOTH_CONNECT
-            )
-        } else {
-            arrayOf(
-                Manifest.permission.BLUETOOTH,
-                Manifest.permission.BLUETOOTH_ADMIN
-            )
-        }
-
-        return requiredPermissions.all { hasPermission(it) }
-    }
-
-    /**
-     * 清理广播状态
-     */
-    private fun cleanupAdvertising() {
-        advertiseCallback = null
-        isAdvertising = false
-        advertisingJob?.cancel()
-        advertisingJob = null
-    }
-
-    /**
-     * 获取BLE广播错误消息
-     */
     private fun getAdvertiseErrorMessage(errorCode: Int): String {
         return when (errorCode) {
             AdvertiseCallback.ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> "设备不支持BLE广播"

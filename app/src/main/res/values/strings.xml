@@ -45,6 +45,8 @@
     <string name="get_bluetooth_error">Sorry, Can\'t get bluetooth data from Webdav.</string>
     <string name="webdav_error">Sorry, We can\'t connect the Webdav server, please check your password and username.</string>
     <string name="webdav_enable">Enable webdav sync</string>
+    <string name="sender_filter_required">Set a device MAC address or manufacturer before starting sync.</string>
+    <string name="sender_start_failed">Unable to start background scanning. Open the app and check Bluetooth and location permissions and settings.</string>
     <string name="scan_blue">Scan Bluetooth</string>
     <string name="start_scan">Start Scan</string>
     <string name="not_open_bluetooth">Please open the bluebooth</string>
@@ -69,6 +71,9 @@
     <string name="hook_log_title">Hook debug logs</string>
     <string name="hook_log_desc">Enable Hook debug logs for troubleshooting</string>
     <string name="ble_advertiser_title">BLE Peripheral Service</string>
+    <string name="ble_advertiser_compatibility">BLE peripheral compatibility mode</string>
+    <string name="ble_advertiser_compatibility_desc">Enable to use the legacy advertising API for better compatibility; disable to use the new API for better performance. Takes effect the next time advertising starts.</string>
+    <string name="ble_advertiser_compatibility_required">Android 7 can only use compatibility mode (legacy advertising API).</string>
     <string name="ble_tile_label">BLE Peripheral</string>
     <string name="show_password">Show password</string>
     <string name="hide_password">Hide password</string>
@@ -128,4 +133,5 @@
     <string name="advertising_remaining">Broadcasting · %1$d seconds remaining</string>
     <string name="delete_history">Delete from history</string>
     <string name="scan_failed">Scan failed (%1$d)</string>
+    <string name="history_read_error">Saved history could not be read. The original data has been preserved.</string>
 </resources>
