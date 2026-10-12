@@ -7,13 +7,13 @@ import android.bluetooth.le.*
 import androidx.compose.runtime.*
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.*
 import net.ankio.bluetooth.R
 import net.ankio.bluetooth.bluetooth.BleDevice
 import net.ankio.bluetooth.config.PreferenceKeys as Keys
 import net.ankio.bluetooth.data.BluetoothData
+import net.ankio.bluetooth.data.AppRepositories
+import net.ankio.bluetooth.data.HistoryReadException
 import net.ankio.bluetooth.utils.*
 
 @SuppressLint("MissingPermission")
@@ -65,6 +65,9 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
     fun start() {
         if (isScanning) return
+        if (!BluetoothPermissions.granted(context, BluetoothPermissions.Operation.SCAN)) {
+            message = context.getString(R.string.no_permission); return
+        }
         if (!bluetoothEnabled()) { message = context.getString(R.string.not_open_bluetooth); return }
         try {
             val activeScanner = adapter?.bluetoothLeScanner
@@ -86,31 +89,34 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         scanner = null
     }
 
-    private fun history(): MutableList<BleDevice> = runCatching {
-        Gson().fromJson<MutableList<BleDevice>>(SpUtils.getString(Keys.HISTORY),
-            object : TypeToken<MutableList<BleDevice>>() {}.type) ?: mutableListOf()
-    }.getOrDefault(mutableListOf())
-
     fun showHistory() {
         stop()
-        showingHistory = true
-        devices.clear()
-        devices.addAll(history().distinctBy { it.address })
+        try {
+            val saved = AppRepositories.history.list()
+            showingHistory = true
+            devices.clear()
+            devices.addAll(saved)
+        } catch (_: HistoryReadException) { message = context.getString(R.string.history_read_error) }
     }
 
-    fun select(device: BleDevice) {
+    fun select(device: BleDevice): Boolean {
         stop()
-        SpUtils.putString(Keys.MAC, device.address)
-        SpUtils.putString(Keys.DATA, device.data)
-        SpUtils.putString(Keys.RSSI, device.rssi.toString())
-        val saved = history().filterNot { it.address == device.address }.toMutableList()
-        saved.add(device)
-        SpUtils.putString(Keys.HISTORY, Gson().toJson(saved))
+        try {
+            AppRepositories.history.upsert(device)
+            sp.edit().putString(Keys.MAC, device.address).putString(Keys.DATA, device.data)
+                .putString(Keys.RSSI, device.rssi.toString()).apply()
+            return true
+        } catch (_: HistoryReadException) {
+            message = context.getString(R.string.history_read_error)
+            return false
+        }
     }
 
     fun delete(device: BleDevice) {
-        SpUtils.putString(Keys.HISTORY, Gson().toJson(history().filterNot { it.address == device.address }))
-        devices.remove(device)
+        try {
+            AppRepositories.history.remove(device.address)
+            devices.remove(device)
+        } catch (_: HistoryReadException) { message = context.getString(R.string.history_read_error) }
     }
 
     override fun onCleared() { stop(); super.onCleared() }

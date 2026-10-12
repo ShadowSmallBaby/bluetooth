@@ -1,8 +1,8 @@
 # Add project specific ProGuard rules here.
 -keepattributes Signature,InnerClasses,EnclosingMethod,*Annotation*
 
-# R8 full mode only retains generic signatures on kept classes. Gson 2.10.1
-# has no bundled consumer rules; history parsing reflects on TypeToken subclasses.
+# Gson 2.10.1 has no bundled consumer rules. Preserve generic signatures for
+# TypeToken callers under R8 full mode; history uses a concrete array type.
 -keep,allowobfuscation,allowoptimization class com.google.gson.reflect.TypeToken
 -keep,allowobfuscation,allowoptimization class * extends com.google.gson.reflect.TypeToken
 
