@@ -30,8 +30,7 @@ object BleAdvertiserManager {
     object BroadcastConfig {
         const val DEFAULT_DATA = "02011A17FF0002317D89030000000F0295699D011000000003FE3C"
         const val DEFAULT_RSSI = -50
-        // 48 字节上限（超过 BLE 传统广播 31 字节，需设备支持扩展广播）
-        const val MAX_DATA_LENGTH = 48
+        const val MAX_DATA_LENGTH = 31
 
         private val MAC_PATTERN = Pattern.compile("^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$")
         private val HEX_PATTERN = Pattern.compile("^[0-9A-Fa-f]+$")
