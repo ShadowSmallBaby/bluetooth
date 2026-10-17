@@ -24,6 +24,11 @@ object ScanTargetResolver {
             (spec.returns == null || typeName(it.returnType) == spec.returns)
     }
 
+    /** First non-static field named [name] in [type] or any superclass. */
+    fun field(type: Class<*>, name: String): java.lang.reflect.Field? = hierarchy(type)
+        .flatMap { it.declaredFields.asSequence() }
+        .firstOrNull { it.name == name && !Modifier.isStatic(it.modifiers) }
+
     fun resolve(entry: Any, profile: HookProfile): ScanTarget? {
         for (path in profile.targetPaths) {
             val target = followPath(entry, path) ?: continue
@@ -42,9 +47,7 @@ object ScanTargetResolver {
                 when (step.kind) {
                     MemberKind.METHOD -> findMethod(target.javaClass, MethodSpec(step.name, emptyList()))
                         ?.apply { isAccessible = true }?.invoke(target)
-                    MemberKind.FIELD -> hierarchy(target.javaClass)
-                        .flatMap { it.declaredFields.asSequence() }
-                        .firstOrNull { it.name == step.name && !Modifier.isStatic(it.modifiers) }
+                    MemberKind.FIELD -> field(target.javaClass, step.name)
                         ?.apply { isAccessible = true }?.get(target)
                 }
             } catch (_: ReflectiveOperationException) {

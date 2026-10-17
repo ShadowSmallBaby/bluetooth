@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": 1,
+  "revision": 3,
   "profiles": [
     {
       "id": "aosp-gatt",
@@ -8,8 +8,8 @@
       "minSdk": 24,
       "maxSdk": 2147483647,
       "classes": [
-        "com.android.bluetooth.gatt.GattService",
-        "com.android.bluetooth.le_scan.ScanController"
+        "com.android.bluetooth.le_scan.ScanController",
+        "com.android.bluetooth.gatt.GattService"
       ],
       "start": [
         {"name": "start", "parameters": []},
@@ -25,14 +25,12 @@
       ],
       "constructorFallback": true,
       "targetPaths": [
+        [],
         [{"kind": "method", "name": "getScanController"}],
         [{"kind": "method", "name": "getTransitionalScanHelper"}],
-        [{"kind": "method", "name": "getScanHelper"}],
-        []
+        [{"kind": "method", "name": "getScanHelper"}]
       ],
-      "handlerPaths": [
-        [{"kind": "field", "name": "mHandler"}]
-      ],
+      "handlerPaths": [],
       "allowMainThread": false,
       "callbacks": [
         {

@@ -106,6 +106,8 @@
     <string name="source_code">源代码</string>
     <string name="version">版本</string>
     <string name="rules_url">规则地址</string>
+    <string name="rules_import">导入本地文件</string>
+    <string name="rules_import_failed">无法读取所选文件：%1$s</string>
     <string name="app_desc">一个可以调试蓝牙的工具</string>
     <string name="hook_rules_source">配置源</string>
     <string name="hook_rules_source_summary">当前源：版本 v%1$d · 来源 %2$s</string>

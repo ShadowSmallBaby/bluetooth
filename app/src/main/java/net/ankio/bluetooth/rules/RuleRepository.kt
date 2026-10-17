@@ -19,11 +19,19 @@ class RuleRepository(private val bundled: String, private val store: RuleStore) 
 
     fun hasPrevious(): Boolean = !store.previous.isNullOrBlank()
 
-    fun install(json: String): SelectedRules {
+    /**
+     * Installs [json] over the active rules. Remote updates must increase the revision so a stale
+     * mirror cannot roll the rules back; a locally imported file may keep the same revision, which
+     * lets a hand-edited copy replace the current one while debugging.
+     */
+    fun install(json: String, allowSameRevision: Boolean = false): SelectedRules {
         val incoming = HookRules.parse(json)
         val current = current()
         if (incoming == current.rules) return current
-        require(incoming.revision > current.rules.revision) { "Rule revision must be newer than ${current.rules.revision}" }
+        require(if (allowSameRevision) incoming.revision >= current.rules.revision
+                else incoming.revision > current.rules.revision) {
+            "Rule revision must be newer than ${current.rules.revision}"
+        }
         store.replace(json, current.json)
         return SelectedRules(incoming, json, "custom")
     }

@@ -108,6 +108,8 @@
     <string name="source_code">Source code</string>
     <string name="version">Version</string>
     <string name="rules_url">Rules URL</string>
+    <string name="rules_import">Import local file</string>
+    <string name="rules_import_failed">Cannot read the selected file: %1$s</string>
     <string name="app_desc">A tool to debug Bluetooth</string>
     <string name="hook_rules_source">Rule source</string>
     <string name="hook_rules_source_summary">Current: revision v%1$d · source %2$s</string>

@@ -2,12 +2,16 @@ package net.ankio.bluetooth.ui.compose
 
 import android.content.ComponentName
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -128,8 +132,17 @@ fun SettingsScreen(activity: MainActivity, model: SettingsViewModel = viewModel(
     }
     if (dialog == "rules") ChoiceDialog(stringResource(R.string.hook_rules_source), { dialog = "" }, showClose = false) {
         PreferenceField(Keys.RULE_URL, R.string.rules_url)
+        // A local file is read through the document picker, so no storage permission is required.
+        val context = LocalContext.current
+        val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+            if (uri != null) {
+                dialog = ""
+                model.importLocal(uri, context)
+            }
+        }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TextButton(stringResource(R.string.cancel), onClick = { dialog = "" }, modifier = Modifier.weight(1f))
+            TextButton(stringResource(R.string.rules_import), enabled = !busy,
+                onClick = { picker.launch(arrayOf("application/json")) }, modifier = Modifier.weight(1f))
             TextButton(stringResource(R.string.save), onClick = {
                 val url = SpUtils.getString(Keys.RULE_URL).trim()
                 if (url.isNotEmpty()) { dialog = ""; model.update(url) }

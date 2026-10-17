@@ -1,7 +1,8 @@
 {
   "changes": [
-    "升级构建工具链：Gradle 9.8.1、AGP 9.4.1、Kotlin 2.4.21",
-    "升级 AndroidX、Compose BOM 2026.09.00、Gson、协程与 WebDAV 等依赖",
-    "修复 BLE 外围调试模式校验导致的单元测试失败"
+    "修复 ColorOS 17 等系统上模拟扫描结果未注入的问题（#4）",
+    "Hook 规则更新至 v3：优先挂载 ScanController",
+    "Hook 目标类自动选择能找到扫描回调的类，不再依赖规则中的顺序",
+    "配置源弹窗新增「导入本地文件」，可直接导入本地 JSON 规则"
   ]
 }
